@@ -1,15 +1,13 @@
-FROM rust:alpine as builder
+FROM rust as builder
+WORKDIR /app
 
-WORKDIR /project
-
-COPY . .
-
+COPY . /app
 RUN cargo build --release
 
-FROM scratch
+FROM gcr.io/distroless/cc
 
 COPY --from=builder \
-    /project/target/x86_64-unknown-linux-musl/release/creatorsforacause \
-    /creatorsforacause
+    /app/target/release/creatorsforacause \
+    /
 
-ENTRYPOINT [ "/creatorsforacause" ]
+CMD [ "/creatorsforacause" ]
