@@ -9,3 +9,13 @@ lto = true
 codegen-units = 1
 
 [dependencies]
+axum = "0.6.0-rc.4"
+color-eyre = "0.6.2"
+envy = "0.4.2"
+reqwest = { version = "0.11.13", features = ["rustls-tls"], default-features = false }
+serde = { version = "1.0.147", features = ["derive"] }
+tokio = { version = "1.21.2", features = ["full"] }
+toml = "0.5.9"
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
+twitch_api = { version = "0.7.0-rc.2", features = ["eventsub", "reqwest", "helix", "client"] }
