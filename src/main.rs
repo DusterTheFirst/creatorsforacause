@@ -1,14 +1,20 @@
-use std::{collections::HashMap, net::SocketAddr};
+use std::{collections::{HashMap, HashSet}, future::Future, net::SocketAddr};
 
-use axum::{routing::get, Router};
 use color_eyre::eyre::Context;
 use serde::Deserialize;
-use tokio::runtime::Builder;
-use tracing::info;
+use tokio::{runtime::Builder, task::LocalSet};
+use tracing::{debug, Level};
+use tracing_subscriber::EnvFilter;
+use twitch::TwitchEnvironment;
+
+use crate::{twitch::twitch_live_watcher, web::web_server};
+
+mod twitch;
+mod web;
 
 #[derive(Deserialize, Debug)]
 struct Creators {
-    twitch: HashMap<String, String>,
+    twitch: HashSet<twitch_api::types::UserName>,
     youtube: HashMap<String, String>,
 }
 
@@ -16,14 +22,33 @@ struct Creators {
 struct Environment {
     /// Socket to listen on for the web server
     listen: Option<SocketAddr>,
+
+    #[serde(flatten)]
+    twitch: TwitchEnvironment,
 }
 
 fn main() -> color_eyre::Result<()> {
+    // Try to load .env file, quietly fail
+    let dotenv = dotenv::dotenv();
+    // Install pretty error formatting
     color_eyre::install()?;
 
     // TODO: honeycomb
-    tracing_subscriber::fmt().init();
+    // Initialize logging
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(Level::INFO.into())
+                .from_env()
+                .wrap_err("failed to parse RUST_LOG")?,
+        )
+        .init();
 
+    if let Ok(path) = dotenv {
+        debug!(?path, "Loaded environment variables");
+    }
+
+    // Load environment variables
     let environment: Environment = match envy::from_env() {
         Err(envy::Error::MissingValue(missing_env)) => {
             color_eyre::eyre::bail!("missing required environment variable: {missing_env}");
@@ -50,29 +75,24 @@ fn main() -> color_eyre::Result<()> {
         .build()
         .wrap_err("unable to create tokio runtime")?;
 
-    runtime.spawn(twitch_live_watcher(http_client, creators.twitch));
-    runtime.block_on(web_server(
-        environment
-            .listen
-            .unwrap_or_else(|| "127.0.0.1:8080".parse().unwrap()),
-    ))
-}
+    let local_set = LocalSet::new();
 
-async fn twitch_live_watcher(http_client: reqwest::Client, creators: HashMap<String, String>) {
-    info!(?creators, "Starting live status watch of twitch creators");
-
-    let client = twitch_api::HelixClient::with_client(http_client);
-
-    client.ev
-}
-
-async fn web_server(listen: SocketAddr) -> color_eyre::Result<()> {
-    let app = Router::new().route("/", get(|| async { "Hello, World!" }));
-
-    info!("Starting web server on http://{listen}");
-
-    axum::Server::bind(&listen)
-        .serve(app.into_make_service())
+    local_set.spawn_local(async move {
+        twitch_live_watcher(http_client, environment.twitch, creators.twitch)
+            .await
+            .expect("web server encountered an un-recoverable error")
+    });
+    local_set.spawn_local(async move {
+        web_server(
+            environment
+                .listen
+                .unwrap_or_else(|| "127.0.0.1:8080".parse().unwrap()),
+        )
         .await
-        .wrap_err("axum server ran into a problem")
+        .expect("web server encountered an un-recoverable error")
+    });
+
+    runtime.block_on(local_set);
+
+    Ok(())
 }
