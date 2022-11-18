@@ -44,40 +44,58 @@ pub async fn twitch_live_watcher(
 
     info!(expires_in = ?token.expires_in(), "Acquired access token");
 
-    let mut creators_futures = JoinSet::new();
-    let mut creators = HashMap::with_capacity(creators_names.len());
+    // let mut creators_futures = JoinSet::new();
+    // let mut creators = HashMap::with_capacity(creators_names.len());
 
-    for nickname in creators_names {
-        creators_futures.spawn_local({
-            let client = client.clone();
-            let token = token.clone();
+    // for nickname in creators_names {
+    //     creators_futures.spawn_local({
+    //         let client = client.clone();
+    //         let token = token.clone();
 
-            async move {
-                (
-                    client
-                        .get_channel_from_login(&nickname, token.as_ref())
-                        .await,
-                    nickname,
-                )
-            }
-        });
-    }
+    //         async move {
+    //             (
+    //                 client
+    //                     .get_channel_from_login(&nickname, token.as_ref())
+    //                     .await,
+    //                 nickname,
+    //             )
+    //         }
+    //     });
+    // }
 
-    while let Some(join_result) = creators_futures.join_next().await {
-        let (channel_result, nickname) = join_result.expect("failed to join future");
+    // while let Some(join_result) = creators_futures.join_next().await {
+    //     let (channel_result, nickname) = join_result.expect("failed to join future");
 
-        match channel_result {
-            Err(error) => error!(?nickname, ?error, "failed to fetch channel from login"),
-            Ok(None) => warn!(?nickname, "creator not found"),
-            Ok(Some(channel)) => {
-                creators.insert(nickname, channel);
-            }
-        }
-    }
+    //     match channel_result {
+    //         Err(error) => error!(?nickname, ?error, "failed to fetch channel from login"),
+    //         Ok(None) => warn!(?nickname, "creator not found"),
+    //         Ok(Some(channel)) => {
+    //             creators.insert(nickname, channel);
+    //         }
+    //     }
+    // }
 
-    dbg!(creators);
+    // dbg!(&creators);
 
-    // client.req_get(twitch_api::helix::streams::GetStreamsRequest::user_ids(&[]), token)
+    // let channel_ids = creators
+    //     .values()
+    //     .map(|channel| channel.broadcaster_id.as_ref())
+    //     .collect::<Vec<_>>();
+
+    let live_streams = client
+        .req_get(
+            twitch_api::helix::streams::GetStreamsRequest::user_logins(
+                creators_names
+                    .iter()
+                    .map(|name| name.as_ref())
+                    .collect::<Vec<_>>(),
+            ),
+            token.as_ref(),
+        )
+        .await
+        .wrap_err("failed to fetch live streams")?;
+
+    dbg!(&live_streams);
 
     Ok(())
 }
