@@ -24,7 +24,7 @@ mod youtube;
 #[derive(Deserialize, Debug)]
 struct Creators {
     twitch: HashSet<twitch_api::types::UserName>,
-    youtube: HashMap<String, String>,
+    youtube: HashSet<String>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -94,8 +94,11 @@ fn main() -> color_eyre::Result<()> {
     //         .await
     //         .expect("web server encountered an un-recoverable error")
     // });
-    let _: JoinHandle<()> =
-        local_set.spawn_local(youtube_live_watcher(reqwest_client, environment.youtube));
+    let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
+        reqwest_client,
+        environment.youtube,
+        creators.youtube,
+    ));
     // let _: JoinHandle<()> = local_set.spawn_local(async move {
     //     web_server(
     //         environment
