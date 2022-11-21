@@ -1,16 +1,25 @@
-use std::{collections::{HashMap, HashSet}, future::Future, net::SocketAddr};
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+    net::SocketAddr,
+};
 
 use color_eyre::eyre::Context;
 use serde::Deserialize;
-use tokio::{runtime::Builder, task::LocalSet};
+use tokio::{
+    runtime::Builder,
+    task::{JoinHandle, LocalSet},
+};
 use tracing::{debug, Level};
 use tracing_subscriber::EnvFilter;
 use twitch::TwitchEnvironment;
+use youtube::YoutubeEnvironment;
 
-use crate::{twitch::twitch_live_watcher, web::web_server};
+use crate::{twitch::twitch_live_watcher, web::web_server, youtube::youtube_live_watcher};
 
 mod twitch;
 mod web;
+mod youtube;
 
 #[derive(Deserialize, Debug)]
 struct Creators {
@@ -25,6 +34,9 @@ struct Environment {
 
     #[serde(flatten)]
     twitch: TwitchEnvironment,
+
+    #[serde(flatten)]
+    youtube: YoutubeEnvironment,
 }
 
 fn main() -> color_eyre::Result<()> {
@@ -64,7 +76,7 @@ fn main() -> color_eyre::Result<()> {
     dbg!(&creators);
 
     // TODO: more configuration
-    let http_client = reqwest::Client::builder()
+    let reqwest_client = reqwest::Client::builder()
         .build()
         .expect("failed to setup http client");
 
@@ -77,20 +89,22 @@ fn main() -> color_eyre::Result<()> {
 
     let local_set = LocalSet::new();
 
-    local_set.spawn_local(async move {
-        twitch_live_watcher(http_client, environment.twitch, creators.twitch)
-            .await
-            .expect("web server encountered an un-recoverable error")
-    });
-    local_set.spawn_local(async move {
-        web_server(
-            environment
-                .listen
-                .unwrap_or_else(|| "127.0.0.1:8080".parse().unwrap()),
-        )
-        .await
-        .expect("web server encountered an un-recoverable error")
-    });
+    // let _: JoinHandle<()> = local_set.spawn_local(async move {
+    //     twitch_live_watcher(reqwest_client, environment.twitch, creators.twitch)
+    //         .await
+    //         .expect("web server encountered an un-recoverable error")
+    // });
+    let _: JoinHandle<()> =
+        local_set.spawn_local(youtube_live_watcher(reqwest_client, environment.youtube));
+    // let _: JoinHandle<()> = local_set.spawn_local(async move {
+    //     web_server(
+    //         environment
+    //             .listen
+    //             .unwrap_or_else(|| "127.0.0.1:8080".parse().unwrap()),
+    //     )
+    //     .await
+    //     .expect("web server encountered an un-recoverable error")
+    // });
 
     runtime.block_on(local_set);
 
