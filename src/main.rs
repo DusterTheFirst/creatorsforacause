@@ -15,7 +15,7 @@ use tokio::{
 use tracing::{debug, Level};
 use tracing_subscriber::EnvFilter;
 use twitch::TwitchEnvironment;
-use youtube::YoutubeEnvironment;
+use youtube::{YoutubeEnvironment, YoutubeHandle};
 
 use crate::{twitch::twitch_live_watcher, web::web_server, youtube::youtube_live_watcher};
 
@@ -26,7 +26,7 @@ mod youtube;
 #[derive(Deserialize, Debug)]
 struct Creators {
     twitch: HashSet<twitch_api::types::UserName>,
-    youtube: HashSet<String>,
+    youtube: HashSet<YoutubeHandle>,
 }
 
 #[derive(Deserialize, Debug)]

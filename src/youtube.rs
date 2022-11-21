@@ -54,6 +54,8 @@ pub async fn youtube_live_watcher(
                 .await
                 .expect("TODO: piss");
 
+            dbg!(video_info.snippet.live_broadcast_content);
+
             // TODO:
             // dbg!(live_streaming_details, snippet, statistics);
         }
