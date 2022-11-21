@@ -1,3 +1,5 @@
+#![forbid(clippy::unwrap_used)]
+
 use std::{
     collections::{HashMap, HashSet},
     future::Future,
