@@ -20,8 +20,10 @@ reqwest = { version = "0.11.13", features = ["rustls-tls", "json"], default-feat
 scraper = "0.13.0"
 serde = { version = "1.0.147", features = ["derive"] }
 serde_json = "1.0.88"
+time = { version = "0.3.17", features = ["serde", "serde-well-known"] }
 tokio = { version = "1.21.2", features = ["full"] }
 toml = "0.5.9"
 tracing = "0.1.37"
+tracing-error = "0.2.0"
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
 twitch_api = { version = "0.7.0-rc.2", features = ["eventsub", "reqwest", "helix", "client"] }

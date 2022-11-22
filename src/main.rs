@@ -8,16 +8,23 @@ use std::{
 
 use color_eyre::eyre::Context;
 use serde::Deserialize;
+use time::OffsetDateTime;
 use tokio::{
     runtime::Builder,
+    sync::watch,
     task::{JoinHandle, LocalSet},
 };
-use tracing::{debug, Level};
-use tracing_subscriber::EnvFilter;
+use tracing::{debug, Instrument, Level};
+use tracing_error::ErrorLayer;
+use tracing_subscriber::{prelude::__tracing_subscriber_SubscriberExt, EnvFilter};
 use twitch::TwitchEnvironment;
 use youtube::{YoutubeEnvironment, YoutubeHandle};
 
-use crate::{twitch::twitch_live_watcher, web::web_server, youtube::youtube_live_watcher};
+use crate::{
+    twitch::twitch_live_watcher,
+    web::web_server,
+    youtube::{youtube_live_watcher, YoutubeLiveStreams},
+};
 
 mod twitch;
 mod web;
@@ -49,14 +56,19 @@ fn main() -> color_eyre::Result<()> {
 
     // TODO: honeycomb
     // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::builder()
-                .with_default_directive(Level::INFO.into())
-                .from_env()
-                .wrap_err("failed to parse RUST_LOG")?,
-        )
-        .init();
+
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer())
+            .with(
+                EnvFilter::builder()
+                    .with_default_directive(Level::INFO.into())
+                    .from_env()
+                    .wrap_err("failed to parse RUST_LOG")?,
+            )
+            .with(ErrorLayer::default()),
+    )
+    .expect("tracing subscriber should set properly");
 
     if let Ok(path) = dotenv {
         debug!(?path, "Loaded environment variables");
@@ -91,6 +103,12 @@ fn main() -> color_eyre::Result<()> {
 
     let local_set = LocalSet::new();
 
+    let (youtube_live_status_sender, mut youtube_live_status_receiver) =
+        watch::channel(YoutubeLiveStreams {
+            updated: OffsetDateTime::UNIX_EPOCH,
+            streams: HashMap::new(),
+        });
+
     // let _: JoinHandle<()> = local_set.spawn_local(async move {
     //     twitch_live_watcher(reqwest_client, environment.twitch, creators.twitch)
     //         .await
@@ -100,7 +118,26 @@ fn main() -> color_eyre::Result<()> {
         reqwest_client,
         environment.youtube,
         creators.youtube,
+        youtube_live_status_sender,
     ));
+    local_set.spawn_local(async move {
+        loop {
+            {
+                let status = &*youtube_live_status_receiver.borrow_and_update();
+
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(status)
+                        .expect("status should be serializable to json")
+                );
+            }
+
+            youtube_live_status_receiver
+                .changed()
+                .await
+                .expect("receiver should not produce an error");
+        }
+    });
     // let _: JoinHandle<()> = local_set.spawn_local(async move {
     //     web_server(
     //         environment

@@ -1,20 +1,21 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
+    rc::Rc,
 };
 
-use google_youtube3::api::{
-    VideoListResponse, VideoLiveStreamingDetails, VideoSnippet, VideoStatistics,
-};
+use google_youtube3::api::{VideoListResponse, VideoLiveStreamingDetails, VideoSnippet};
 use once_cell::sync::Lazy;
 use reqwest::{StatusCode, Url};
 use scraper::{Html, Selector};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use tokio::{
     sync::watch,
+    task::JoinSet,
     time::{Duration, Instant},
 };
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn, Instrument};
 
 #[derive(Deserialize, Debug)]
 pub struct YoutubeEnvironment {
@@ -37,45 +38,124 @@ impl Debug for ApiKey {
     }
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn youtube_live_watcher(
     http_client: reqwest::Client,
     environment: YoutubeEnvironment,
     creators: HashSet<YoutubeHandle>,
+    status_sender: watch::Sender<YoutubeLiveStreams>,
 ) {
-    for creator in creators {
-        let video_id = get_livestream_video_id(&http_client, &creator)
-            .await
-            .expect("TODO: piss");
+    let api_key = Rc::new(environment.api_key);
 
-        if let Some(video_id) = video_id {
-            debug!(%creator, %video_id, "creator has live stream");
+    let creators_count = creators.len();
 
-            let video_info = get_video_info(&http_client, &video_id, &environment.api_key)
-                .await
-                .expect("TODO: piss");
+    let mut next_refresh = Instant::now();
+    let refresh_interval = Duration::from_secs(60 * 10);
 
-            dbg!(video_info.snippet.live_broadcast_content);
-
-            // TODO:
-            // dbg!(live_streaming_details, snippet, statistics);
-        }
-    }
-
-    let mut last_refresh = Instant::now();
-    let mut live_statuses: HashMap<YoutubeHandle, Option<VideoId>> = HashMap::new();
-    let (live_status_sender, live_status_receiver) = watch::channel(None::<()>);
     loop {
+        let mut set = JoinSet::new();
+
+        for creator in creators.iter().cloned() {
+            let http_client = http_client.clone();
+            let api_key = api_key.clone();
+
+            let span = tracing::trace_span!("creator", ?creator);
+
+            set.spawn_local(
+                async move {
+                    let video_id = get_livestream_video_id(&http_client, &creator)
+                        .await
+                        .expect("TODO: piss");
+
+                    if let Some(video_id) = video_id {
+                        debug!(%video_id, "creator has live stream");
+
+                        let video_info = get_video_info(&http_client, &video_id, &api_key)
+                            .await
+                            .expect("TODO: piss");
+
+                        if matches!(
+                            video_info.snippet.live_broadcast_content.as_deref(),
+                            Some("live")
+                        ) {
+                            let start_time = video_info
+                                .live_streaming_details
+                                .actual_start_time
+                                .expect("actual_start_time field should be present");
+                            let concurrent_viewers = video_info
+                                .live_streaming_details
+                                .concurrent_viewers
+                                .expect("concurrent_viewers field should be present");
+
+                            let livestream_details = LiveStreamDetails {
+                                href: format!("https://youtube.com/watch?v={}", video_id),
+                                start_time,
+                                concurrent_viewers,
+                            };
+
+                            info!(?livestream_details, "creator is live");
+
+                            return Some((creator, livestream_details));
+                        }
+                    }
+
+                    None
+                }
+                .instrument(span),
+            );
+        }
+
+        // Drive all futures to completion, collecting their results
+        let mut live_broadcasts: HashMap<YoutubeHandle, Option<LiveStreamDetails>> = creators
+            .iter()
+            .cloned()
+            .map(|handle| (handle, None))
+            .collect();
+
+        while let Some(result) = set.join_next().await {
+            match result {
+                Ok(Some((creator, broadcast_info))) => {
+                    live_broadcasts.insert(creator, Some(broadcast_info));
+                }
+                Ok(None) => {}
+                Err(error) => error!(%error, "failed to drive creator future to completion"),
+            }
+        }
+
+        // Send status to web server
+        status_sender.send_replace(YoutubeLiveStreams {
+            updated: OffsetDateTime::now_utc(),
+            streams: live_broadcasts,
+        });
+
         // Refresh every 10 minutes
-        tokio::time::sleep_until(last_refresh + Duration::from_secs(60 * 10)).await;
+        next_refresh += refresh_interval;
+        trace!(?refresh_interval, "Waiting for next refresh");
+        tokio::time::sleep_until(next_refresh).await;
     }
+}
+
+#[derive(Debug, Serialize)]
+
+pub struct YoutubeLiveStreams {
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated: OffsetDateTime,
+    pub streams: HashMap<YoutubeHandle, Option<LiveStreamDetails>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LiveStreamDetails {
+    pub href: String,
+    pub start_time: String,
+    pub concurrent_viewers: String,
 }
 
 struct VideoInfo {
     live_streaming_details: VideoLiveStreamingDetails,
     snippet: VideoSnippet,
-    statistics: VideoStatistics,
 }
 
+#[tracing::instrument(skip(http_client, api_key))]
 async fn get_video_info(
     http_client: &reqwest::Client,
     video_id: &VideoIdRef,
@@ -91,7 +171,7 @@ async fn get_video_info(
         let mut url = VIDEO_API_URL.clone();
 
         url.query_pairs_mut()
-            .append_pair("part", "snippet,statistics,liveStreamingDetails")
+            .append_pair("part", "snippet,liveStreamingDetails")
             .append_pair("id", video_id.as_str())
             .append_pair("key", api_key.as_str());
 
@@ -139,14 +219,10 @@ async fn get_video_info(
     let snippet = video
         .snippet
         .expect("snippet part should exist in response");
-    let statistics = video
-        .statistics
-        .expect("statistics part should exist in response");
 
     Ok(VideoInfo {
         live_streaming_details,
         snippet,
-        statistics,
     })
 }
 
@@ -192,7 +268,7 @@ async fn get_livestream_video_id(
 
     // Get the canonical url from the first <link rel="canonical" href="..."/>
     let canonical_url = html
-        .select(&*SELECTOR)
+        .select(&SELECTOR)
         .next()
         .and_then(|element| element.value().attr("href"));
 
@@ -220,7 +296,7 @@ async fn get_livestream_video_id(
 
     // Ensure that the url is a watch (video) url
     if canonical_url.path() != "/watch" {
-        trace!(%canonical_url, %creator, "canonical url is not a watch url");
+        trace!(%canonical_url, "canonical url is not a watch url");
 
         return Ok(None);
     }
@@ -228,7 +304,7 @@ async fn get_livestream_video_id(
     // Get the video ID from the query parameters
     let video_id = canonical_url
         .query_pairs()
-        .find(|(key, value)| key == "v")
+        .find(|(key, _)| key == "v")
         .map(|(_, value)| value)
         .expect("canonical url should have a `v` query parameter with the video id");
 
