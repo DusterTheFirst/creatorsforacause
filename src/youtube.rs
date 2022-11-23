@@ -38,7 +38,6 @@ impl Debug for ApiKey {
     }
 }
 
-#[tracing::instrument(skip_all)]
 pub async fn youtube_live_watcher(
     http_client: reqwest::Client,
     environment: YoutubeEnvironment,
@@ -47,92 +46,100 @@ pub async fn youtube_live_watcher(
 ) {
     let api_key = Rc::new(environment.api_key);
 
-    let creators_count = creators.len();
-
     let mut next_refresh = Instant::now();
     let refresh_interval = Duration::from_secs(60 * 10);
 
     loop {
-        let mut set = JoinSet::new();
-
-        for creator in creators.iter().cloned() {
-            let http_client = http_client.clone();
-            let api_key = api_key.clone();
-
-            let span = tracing::trace_span!("creator", ?creator);
-
-            set.spawn_local(
-                async move {
-                    let video_id = get_livestream_video_id(&http_client, &creator)
-                        .await
-                        .expect("TODO: piss");
-
-                    if let Some(video_id) = video_id {
-                        debug!(%video_id, "creator has live stream");
-
-                        let video_info = get_video_info(&http_client, &video_id, &api_key)
-                            .await
-                            .expect("TODO: piss");
-
-                        if matches!(
-                            video_info.snippet.live_broadcast_content.as_deref(),
-                            Some("live")
-                        ) {
-                            let start_time = video_info
-                                .live_streaming_details
-                                .actual_start_time
-                                .expect("actual_start_time field should be present");
-                            let concurrent_viewers = video_info
-                                .live_streaming_details
-                                .concurrent_viewers
-                                .expect("concurrent_viewers field should be present");
-
-                            let livestream_details = LiveStreamDetails {
-                                href: format!("https://youtube.com/watch?v={}", video_id),
-                                start_time,
-                                concurrent_viewers,
-                            };
-
-                            info!(?livestream_details, "creator is live");
-
-                            return Some((creator, livestream_details));
-                        }
-                    }
-
-                    None
-                }
-                .instrument(span),
-            );
-        }
-
-        // Drive all futures to completion, collecting their results
-        let mut live_broadcasts: HashMap<YoutubeHandle, Option<LiveStreamDetails>> = creators
-            .iter()
-            .cloned()
-            .map(|handle| (handle, None))
-            .collect();
-
-        while let Some(result) = set.join_next().await {
-            match result {
-                Ok(Some((creator, broadcast_info))) => {
-                    live_broadcasts.insert(creator, Some(broadcast_info));
-                }
-                Ok(None) => {}
-                Err(error) => error!(%error, "failed to drive creator future to completion"),
-            }
-        }
-
-        // Send status to web server
-        status_sender.send_replace(YoutubeLiveStreams {
-            updated: OffsetDateTime::now_utc(),
-            streams: live_broadcasts,
-        });
+        update_live_statuses(&creators, &http_client, &api_key, &status_sender).await;
 
         // Refresh every 10 minutes
         next_refresh += refresh_interval;
         trace!(?refresh_interval, "Waiting for next refresh");
+
         tokio::time::sleep_until(next_refresh).await;
     }
+}
+
+#[tracing::instrument(skip_all)]
+async fn update_live_statuses(
+    creators: &HashSet<YoutubeHandle>,
+    http_client: &reqwest::Client,
+    api_key: &Rc<ApiKey>,
+    status_sender: &watch::Sender<YoutubeLiveStreams>,
+) {
+    let mut set = JoinSet::new();
+    for creator in creators.iter().cloned() {
+        let http_client = http_client.clone();
+        let api_key = api_key.clone();
+
+        let span = tracing::trace_span!("creator_update", ?creator);
+
+        set.spawn_local(
+            async move {
+                let video_id = get_livestream_video_id(&http_client, &creator)
+                    .await
+                    .expect("TODO: piss");
+
+                if let Some(video_id) = video_id {
+                    debug!(%video_id, "creator has live stream");
+
+                    let video_info = get_video_info(&http_client, &video_id, &api_key)
+                        .await
+                        .expect("TODO: piss");
+
+                    if matches!(
+                        video_info.snippet.live_broadcast_content.as_deref(),
+                        Some("live")
+                    ) {
+                        let start_time = video_info
+                            .live_streaming_details
+                            .actual_start_time
+                            .expect("actual_start_time field should be present");
+                        let concurrent_viewers = video_info
+                            .live_streaming_details
+                            .concurrent_viewers
+                            .expect("concurrent_viewers field should be present");
+
+                        let livestream_details = LiveStreamDetails {
+                            href: format!("https://youtube.com/watch?v={}", video_id),
+                            start_time,
+                            concurrent_viewers,
+                        };
+
+                        info!(?livestream_details, "creator is live");
+
+                        return Some((creator, livestream_details));
+                    }
+                }
+
+                None
+            }
+            .instrument(span),
+        );
+    }
+
+    // Drive all futures to completion, collecting their results
+    let mut live_broadcasts: HashMap<YoutubeHandle, Option<LiveStreamDetails>> = creators
+        .iter()
+        .cloned()
+        .map(|handle| (handle, None))
+        .collect();
+
+    while let Some(result) = set.join_next().await {
+        match result {
+            Ok(Some((creator, broadcast_info))) => {
+                live_broadcasts.insert(creator, Some(broadcast_info));
+            }
+            Ok(None) => {}
+            Err(error) => error!(%error, "failed to drive creator future to completion"),
+        }
+    }
+
+    // Send status to web server
+    status_sender.send_replace(YoutubeLiveStreams {
+        updated: OffsetDateTime::now_utc(),
+        streams: live_broadcasts,
+    });
 }
 
 #[derive(Debug, Serialize)]
