@@ -120,33 +120,36 @@ fn main() -> color_eyre::Result<()> {
         creators.youtube,
         youtube_live_status_sender,
     ));
-    local_set.spawn_local(async move {
-        loop {
-            {
-                let status = &*youtube_live_status_receiver.borrow_and_update();
+    // local_set.spawn_local(async move {
+    //     loop {
+    //         {
+    //             let status = &*youtube_live_status_receiver.borrow_and_update();
 
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(status)
-                        .expect("status should be serializable to json")
-                );
-            }
+    //             println!(
+    //                 "{}",
+    //                 serde_json::to_string_pretty(status)
+    //                     .expect("status should be serializable to json")
+    //             );
+    //         }
 
-            youtube_live_status_receiver
-                .changed()
-                .await
-                .expect("receiver should not produce an error");
-        }
-    });
-    // let _: JoinHandle<()> = local_set.spawn_local(async move {
-    //     web_server(
-    //         environment
-    //             .listen
-    //             .unwrap_or_else(|| "127.0.0.1:8080".parse().unwrap()),
-    //     )
-    //     .await
-    //     .expect("web server encountered an un-recoverable error")
+    //         youtube_live_status_receiver
+    //             .changed()
+    //             .await
+    //             .expect("receiver should not produce an error");
+    //     }
     // });
+    let _: JoinHandle<()> = local_set.spawn_local(async move {
+        web_server(
+            environment.listen.unwrap_or_else(|| {
+                "127.0.0.1:8080"
+                    .parse()
+                    .expect("default socket address should be a valid socket address")
+            }),
+            youtube_live_status_receiver,
+        )
+        .await
+        .expect("web server encountered an un-recoverable error")
+    });
 
     runtime.block_on(local_set);
 
