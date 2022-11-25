@@ -4,6 +4,7 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     str::FromStr,
+    sync::Arc,
 };
 
 use color_eyre::eyre::Context;
@@ -15,6 +16,8 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
+use rand::RngCore;
+use reqwest::Url;
 use serde::Deserialize;
 use time::OffsetDateTime;
 use tokio::{
@@ -22,7 +25,7 @@ use tokio::{
     task::{JoinHandle, LocalSet},
 };
 use tonic::{metadata::MetadataMap, transport::ClientTlsConfig};
-use tracing::{debug, Instrument, Level};
+use tracing::{debug, Level};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{
     filter::Targets, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
@@ -50,7 +53,9 @@ struct Creators {
 #[derive(Deserialize, Debug)]
 struct Environment {
     /// Socket to listen on for the web server
-    listen: Option<SocketAddr>,
+    listen: SocketAddr,
+    /// The domain that this app is accessible at
+    domain: Url,
 
     /// API key for honeycomb
     honeycomb_key: String,
@@ -68,6 +73,10 @@ struct Environment {
 // can remove the need for locking and atomics.
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> color_eyre::Result<()> {
+    async_main().await
+}
+
+async fn async_main() -> color_eyre::Result<()> {
     // Try to load .env file, quietly fail
     let dotenv = dotenv::dotenv();
     // Install pretty error formatting
@@ -155,6 +164,15 @@ async fn main() -> color_eyre::Result<()> {
         .build()
         .expect("failed to setup http client");
 
+    let eventsub_secret: Arc<str> = {
+        let mut eventsub_secret = [0; 75];
+
+        rand::thread_rng().fill_bytes(&mut eventsub_secret);
+
+        // Not really needed, but we need to make axum happy since they want all state to be Sync
+        Arc::from(base64::encode(eventsub_secret))
+    };
+
     let local_set = LocalSet::new();
 
     let (youtube_live_status_sender, youtube_live_status_receiver) =
@@ -163,43 +181,32 @@ async fn main() -> color_eyre::Result<()> {
             streams: HashMap::new(),
         });
 
-    // let _: JoinHandle<()> = local_set.spawn_local(async move {
-    //     twitch_live_watcher(reqwest_client, environment.twitch, creators.twitch)
-    //         .await
-    //         .expect("web server encountered an un-recoverable error")
-    // });
-    let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
-        reqwest_client,
-        environment.youtube,
-        creators.youtube,
-        youtube_live_status_sender,
-    ));
-    // local_set.spawn_local(async move {
-    //     loop {
-    //         {
-    //             let status = &*youtube_live_status_receiver.borrow_and_update();
+    let _: JoinHandle<()> = local_set.spawn_local({
+        let eventsub_secret = eventsub_secret.clone();
 
-    //             println!(
-    //                 "{}",
-    //                 serde_json::to_string_pretty(status)
-    //                     .expect("status should be serializable to json")
-    //             );
-    //         }
-
-    //         youtube_live_status_receiver
-    //             .changed()
-    //             .await
-    //             .expect("receiver should not produce an error");
-    //     }
-    // });
+        async move {
+            twitch_live_watcher(
+                reqwest_client,
+                environment.twitch,
+                environment.domain,
+                eventsub_secret,
+                creators.twitch,
+            )
+            .await
+            .expect("web server encountered an un-recoverable error")
+        }
+    });
+    // let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
+    //     reqwest_client,
+    //     environment.youtube,
+    //     creators.youtube,
+    //     youtube_live_status_sender,
+    // ));
     let _: JoinHandle<()> = local_set.spawn_local(async move {
         web_server(
-            environment.listen.unwrap_or_else(|| {
-                "127.0.0.1:8080"
-                    .parse()
-                    .expect("default socket address should be a valid socket address")
-            }),
+            environment.listen,
             youtube_live_status_receiver,
+            eventsub_secret,
         )
         .await
         .expect("web server encountered an un-recoverable error")

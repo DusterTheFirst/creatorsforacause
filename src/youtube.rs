@@ -17,6 +17,8 @@ use tokio::{
 };
 use tracing::{debug, error, info, trace, warn, Instrument};
 
+use crate::web::LiveStreamDetails;
+
 #[derive(Deserialize, Debug)]
 pub struct YoutubeEnvironment {
     #[serde(rename = "youtube_api_key")]
@@ -94,14 +96,19 @@ async fn update_live_statuses(
                         let start_time = video_info
                             .live_streaming_details
                             .actual_start_time
-                            .expect("actual_start_time field should be present");
+                            .expect("actual_start_time field should be present in liveStreamingDetails");
                         let concurrent_viewers = video_info
                             .live_streaming_details
                             .concurrent_viewers
-                            .expect("concurrent_viewers field should be present");
+                            .expect("concurrent_viewers field should be present in liveStreamingDetails");
+                        let title = video_info
+                            .snippet
+                            .title
+                            .expect("title should be present in snippet");
 
                         let livestream_details = LiveStreamDetails {
                             href: format!("https://youtube.com/watch?v={}", video_id),
+                            title,
                             start_time,
                             concurrent_viewers,
                         };
@@ -148,13 +155,6 @@ pub struct YoutubeLiveStreams {
     #[serde(with = "time::serde::rfc3339")]
     pub updated: OffsetDateTime,
     pub streams: HashMap<YoutubeHandle, Option<LiveStreamDetails>>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct LiveStreamDetails {
-    pub href: String,
-    pub start_time: String,
-    pub concurrent_viewers: String,
 }
 
 struct VideoInfo {
