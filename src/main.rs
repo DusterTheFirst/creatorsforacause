@@ -4,7 +4,6 @@ use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
     str::FromStr,
-    sync::Arc,
 };
 
 use color_eyre::eyre::Context;
@@ -16,8 +15,6 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
-use rand::RngCore;
-use reqwest::Url;
 use serde::Deserialize;
 use time::OffsetDateTime;
 use tokio::{
@@ -36,8 +33,8 @@ use youtube::{YoutubeEnvironment, YoutubeHandle};
 
 use crate::{
     twitch::twitch_live_watcher,
-    web::web_server,
-    youtube::{youtube_live_watcher, YoutubeLiveStreams},
+    web::{web_server, LiveStreamList},
+    youtube::youtube_live_watcher,
 };
 
 mod twitch;
@@ -54,8 +51,6 @@ struct Creators {
 struct Environment {
     /// Socket to listen on for the web server
     listen: SocketAddr,
-    /// The domain that this app is accessible at
-    domain: Url,
 
     /// API key for honeycomb
     honeycomb_key: String,
@@ -164,53 +159,38 @@ async fn async_main() -> color_eyre::Result<()> {
         .build()
         .expect("failed to setup http client");
 
-    let eventsub_secret: Arc<str> = {
-        let mut eventsub_secret = [0; 75];
-
-        rand::thread_rng().fill_bytes(&mut eventsub_secret);
-
-        // Not really needed, but we need to make axum happy since they want all state to be Sync
-        Arc::from(base64::encode(eventsub_secret))
-    };
-
     let local_set = LocalSet::new();
 
-    let (youtube_live_status_sender, youtube_live_status_receiver) =
-        watch::channel(YoutubeLiveStreams {
+    // We have to use "Sync" channels over Rc<RefCell<_>> since axum requires all state be sync
+    // even though we are guaranteed to be on the same thread (single threaded async runtime)
+    let (youtube_live_streams_writer, youtube_live_streams_reader) =
+        watch::channel(LiveStreamList {
             updated: OffsetDateTime::UNIX_EPOCH,
             streams: HashMap::new(),
         });
 
-    let _: JoinHandle<()> = local_set.spawn_local({
-        let eventsub_secret = eventsub_secret.clone();
+    let (twitch_live_streams_writer, twitch_live_streams_reader) = watch::channel(LiveStreamList {
+        updated: OffsetDateTime::UNIX_EPOCH,
+        streams: HashMap::new(),
+    });
 
-        async move {
-            twitch_live_watcher(
-                reqwest_client,
-                environment.twitch,
-                environment.domain,
-                eventsub_secret,
-                creators.twitch,
-            )
-            .await
-            .expect("web server encountered an un-recoverable error")
-        }
-    });
-    // let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
-    //     reqwest_client,
-    //     environment.youtube,
-    //     creators.youtube,
-    //     youtube_live_status_sender,
-    // ));
-    let _: JoinHandle<()> = local_set.spawn_local(async move {
-        web_server(
-            environment.listen,
-            youtube_live_status_receiver,
-            eventsub_secret,
-        )
-        .await
-        .expect("web server encountered an un-recoverable error")
-    });
+    let _: JoinHandle<()> = local_set.spawn_local(twitch_live_watcher(
+        reqwest_client.clone(),
+        environment.twitch,
+        creators.twitch,
+        twitch_live_streams_writer,
+    ));
+    let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
+        reqwest_client,
+        environment.youtube,
+        creators.youtube,
+        youtube_live_streams_writer,
+    ));
+    let _: JoinHandle<()> = local_set.spawn_local(web_server(
+        environment.listen,
+        youtube_live_streams_reader,
+        twitch_live_streams_reader,
+    ));
 
     local_set.await;
 

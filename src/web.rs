@@ -1,39 +1,42 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{collections::HashMap, hash::Hash, net::SocketAddr};
 
-use axum::{
-    extract::State,
-    handler::Handler,
-    routing::{get, post},
-    Json, Router, Server,
-};
-use color_eyre::eyre::Context;
+use axum::{extract::State, routing::get, Json, Router, Server};
 use serde::Serialize;
 use serde_json::{json, Value};
+use time::OffsetDateTime;
 use tokio::sync::watch;
 use tracing::info;
+use twitch_api::types::Nickname;
 
-use crate::{twitch::handle_eventsub, youtube::YoutubeLiveStreams};
+use crate::youtube::YoutubeHandle;
+
+#[derive(Debug, Serialize)]
+
+pub struct LiveStreamList<Key: Hash + Eq> {
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated: OffsetDateTime,
+    pub streams: HashMap<Key, Option<LiveStreamDetails>>,
+}
 
 #[derive(Debug, Serialize)]
 pub struct LiveStreamDetails {
     pub href: String,
     pub title: String,
     pub start_time: String,
-    pub concurrent_viewers: String,
+    pub viewers: u32,
 }
 
-#[tracing::instrument(skip(youtube_status, eventsub_secret))]
+#[tracing::instrument(skip(youtube_livestreams, twitch_livestreams))]
 pub async fn web_server(
     listen: SocketAddr,
-    youtube_status: watch::Receiver<YoutubeLiveStreams>,
-    eventsub_secret: Arc<str>,
-) -> color_eyre::Result<()> {
+    youtube_livestreams: watch::Receiver<LiveStreamList<YoutubeHandle>>,
+    twitch_livestreams: watch::Receiver<LiveStreamList<Nickname>>,
+) {
     let app = Router::new()
         .route("/", get(|| async { "OK" }))
-        .route_service("/status", status.with_state(youtube_status))
         .route_service(
-            "/twitch/eventsub",
-            post(handle_eventsub).with_state(eventsub_secret),
+            "/status",
+            get(status).with_state((youtube_livestreams, twitch_livestreams)),
         );
 
     info!("Starting web server on http://{listen}");
@@ -41,11 +44,19 @@ pub async fn web_server(
     Server::bind(&listen)
         .serve(app.into_make_service())
         .await
-        .wrap_err("axum server ran into a problem")
+        .expect("axum server ran into a problem")
 }
 
-async fn status(State(youtube_status): State<watch::Receiver<YoutubeLiveStreams>>) -> Json<Value> {
+#[axum::debug_handler]
+#[allow(clippy::type_complexity)]
+async fn status(
+    State((youtube_status, twitch_live_streams)): State<(
+        watch::Receiver<LiveStreamList<YoutubeHandle>>,
+        watch::Receiver<LiveStreamList<Nickname>>,
+    )>,
+) -> Json<Value> {
     Json(json!({
         "youtube": &*youtube_status.borrow(),
+        "twitch": &*twitch_live_streams.borrow(),
     }))
 }

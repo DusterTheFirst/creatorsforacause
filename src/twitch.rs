@@ -1,36 +1,22 @@
 use std::{
     collections::{HashMap, HashSet},
     rc::Rc,
-    sync::Arc,
 };
 
-use axum::{
-    body::{Body, HttpBody},
-    extract::State,
-    http::Request,
-    response::{IntoResponse, Response},
-};
-use color_eyre::eyre::Context;
-use hyper::{body, StatusCode};
-use reqwest::Url;
 use serde::Deserialize;
-use tokio::task::{JoinSet, LocalSet};
-use tracing::{error, info, trace, trace_span, warn, Instrument};
+use time::OffsetDateTime;
+use tokio::{
+    sync::watch,
+    time::{Duration, Instant},
+};
+use tracing::{error, info, trace, warn};
 use twitch_api::{
-    eventsub::{
-        self, stream::StreamOnlineV1, Event, Message, Payload, Status, Transport,
-        VerificationRequest,
-    },
-    helix::{
-        channels::ChannelInformation,
-        eventsub::{
-            CreateEventSubSubscriptionBody, CreateEventSubSubscriptionRequest,
-            DeleteEventSubSubscriptionRequest, GetEventSubSubscriptionsRequest,
-        },
-    },
+    helix::streams::GetStreamsRequest,
     twitch_oauth2::{AppAccessToken, ClientId, ClientSecret, TwitchToken},
     types::{Nickname, UserName},
 };
+
+use crate::web::{LiveStreamDetails, LiveStreamList};
 
 #[derive(Deserialize, Debug)]
 pub struct TwitchEnvironment {
@@ -43,10 +29,9 @@ pub struct TwitchEnvironment {
 pub async fn twitch_live_watcher(
     http_client: reqwest::Client,
     environment: TwitchEnvironment,
-    domain: Url,
-    eventsub_secret: Arc<str>,
     creators_names: HashSet<UserName>,
-) -> color_eyre::Result<()> {
+    status_sender: watch::Sender<LiveStreamList<Nickname>>,
+) {
     info!(
         ?creators_names,
         "Starting live status watch of twitch creators"
@@ -61,204 +46,91 @@ pub async fn twitch_live_watcher(
             vec![],
         )
         .await
-        .wrap_err("attempted to fetch app access token")?,
+        .expect("access token should be fetched successfully"),
     );
 
     info!(expires_in = ?token.expires_in(), "Acquired access token");
 
-    // See what we are already subscribed to
-    let subscriptions = client
-        .req_get(GetEventSubSubscriptionsRequest::default(), token.as_ref())
-        .await
-        .expect("piss");
-    let subscriptions = subscriptions.data.subscriptions;
+    let mut next_refresh = Instant::now();
+    let refresh_interval = Duration::from_secs(60 * 10);
 
-    let bad_subscriptions = subscriptions
-        .iter()
-        .filter(|subscription| subscription.status == Status::WebhookCallbackVerificationFailed);
+    loop {
+        if let Some(live_statuses) = get_live_statuses(&client, &creators_names, &token).await {
+            status_sender.send_replace(LiveStreamList {
+                updated: OffsetDateTime::now_utc(),
+                streams: live_statuses,
+            });
+        } else {
+            warn!("no update to the live streams");
+        }
 
-    let good_subscriptions = subscriptions
-        .iter()
-        .filter(|subscription| subscription.status != Status::WebhookCallbackVerificationFailed);
+        // Refresh every 10 minutes
+        next_refresh += refresh_interval;
+        trace!(?refresh_interval, "Waiting for next refresh");
 
-    let set = LocalSet::new();
-    for subscription in bad_subscriptions {
-        let client = client.clone();
-        let token = token.clone();
-        let id = subscription.id.clone();
-
-        let span = trace_span!("delete_subscription", %id);
-
-        set.spawn_local(
-            async move {
-                client
-                    .req_delete(DeleteEventSubSubscriptionRequest::id(id), token.as_ref())
-                    .await
-                    .expect("TODO: piss");
-
-                trace!("removed failed subscription");
-            }
-            .instrument(span),
-        );
+        tokio::time::sleep_until(next_refresh).await;
     }
-    set.await;
-
-    dbg!(subscriptions);
-
-    let channel_info = get_channel_information(creators_names, client.clone(), token.clone()).await;
-
-    for channel in channel_info.into_values() {
-        let online_subscription = StreamOnlineV1::broadcaster_user_id(channel.broadcaster_id);
-        // let offline_subscription = StreamOfflineV1::broadcaster_user_id(broadcaster_user_id);
-        // let update_subscription = ChannelUpdateV1::broadcaster_user_id(broadcaster_user_id);
-
-        let transport = Transport::webhook(
-            domain
-                .join("twitch/eventsub")
-                .expect("webhook url should be valid"),
-            String::from(eventsub_secret.as_ref()),
-        );
-
-        client
-            .req_post(
-                CreateEventSubSubscriptionRequest::new(),
-                CreateEventSubSubscriptionBody::new(online_subscription, transport),
-                token.as_ref(),
-            )
-            .await
-            .expect("TODO:");
-    }
-
-    // let live_streams = client
-    //     .req_get(
-    //         twitch_api::helix::streams::GetStreamsRequest::user_logins(
-    //             creators_names
-    //                 .iter()
-    //                 .map(|name| name.as_ref())
-    //                 .collect::<Vec<_>>(),
-    //         ),
-    //         token.as_ref(),
-    //     )
-    //     .await
-    //     .wrap_err("failed to fetch live streams")?;
-
-    // dbg!(&live_streams);
-
-    Ok(())
 }
 
-async fn get_channel_information(
-    creators_names: HashSet<Nickname>,
-    client: twitch_api::HelixClient<'static, reqwest::Client>,
-    token: Rc<AppAccessToken>,
-) -> HashMap<Nickname, ChannelInformation> {
-    let mut creators_futures = JoinSet::new();
-    for nickname in creators_names {
-        creators_futures.spawn_local({
-            let client = client.clone();
-            let token = token.clone();
+#[tracing::instrument(skip(client, creators_names, token))]
+async fn get_live_statuses(
+    client: &twitch_api::HelixClient<'static, reqwest::Client>,
+    creators_names: &HashSet<Nickname>,
+    token: &Rc<AppAccessToken>,
+) -> Option<HashMap<Nickname, Option<LiveStreamDetails>>> {
+    let live_streams = client
+        .req_get(
+            GetStreamsRequest::user_logins(
+                creators_names
+                    .iter()
+                    .map(|name| name.as_ref())
+                    .collect::<Vec<_>>(),
+            ),
+            token.as_ref(),
+        )
+        .await;
 
-            async move {
-                (
-                    client
-                        .get_channel_from_login(&nickname, token.as_ref())
-                        .await,
-                    nickname,
-                )
-            }
-        });
-    }
+    let live_streams = match live_streams {
+        Ok(live_streams) => live_streams,
+        Err(error) => {
+            error!(%error, "failed to get livestreams");
 
-    let mut creators = HashMap::with_capacity(creators_futures.len());
-    while let Some(join_result) = creators_futures.join_next().await {
-        match join_result {
-            Ok((Err(error), nickname)) => {
-                error!(?nickname, ?error, "failed to fetch channel from login")
-            }
-            Ok((Ok(None), nickname)) => warn!(?nickname, "creator not found"),
-            Ok((Ok(Some(channel)), nickname)) => {
-                creators.insert(nickname, channel);
-            }
-            Err(error) => error!(%error, "failed to drive creator future to completion"),
+            return None;
         }
-    }
-
-    creators
-}
-
-pub async fn handle_eventsub(
-    State(eventsub_secret): State<Arc<str>>,
-    request: Request<Body>,
-) -> Response {
-    const MAX_ALLOWED_REQUEST_SIZE: u64 = 2u64.pow(20); // 1 Megabyte
-
-    // Protect against super large http bodies
-    match request.body().size_hint().upper() {
-        Some(size) if size < MAX_ALLOWED_REQUEST_SIZE => {}
-        Some(size) => {
-            warn!(size, "rejected eventsub request with body length too large");
-            return (
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "content-length exceeds maximum of 1 Megabyte",
-            )
-                .into_response();
-        }
-        None => {
-            warn!("rejected eventsub request with no body length given");
-            return (StatusCode::BAD_REQUEST, "content-length not provided").into_response();
-        }
-    }
-
-    // Convert Body to Vec<u8> the hard way
-    let request = {
-        let mut builder = Request::builder()
-            .uri(request.uri())
-            .method(request.method());
-
-        builder
-            .headers_mut()
-            .expect("request should be a valid request")
-            .extend(request.headers().clone());
-
-        builder
-            .body(body::to_bytes(request.into_body()).await.expect("TODO:"))
-            .expect("request should be a valid request")
     };
 
-    // Verify that twitch did indeed send this request
-    if !Event::verify_payload(&request, eventsub_secret.as_bytes()) {
-        warn!("rejected eventsub request with bad hmac");
+    let mut all_streams: HashMap<Nickname, Option<LiveStreamDetails>> = creators_names
+        .iter()
+        .cloned()
+        .map(|handle| (handle, None))
+        .collect();
 
-        return (
-            StatusCode::FORBIDDEN,
-            "hmac check failed on provided information",
-        )
-            .into_response();
-    }
+    // Read through pagination
+    let mut live_streams = Some(live_streams);
+    while let Some(previous) = live_streams {
+        all_streams.extend(previous.data.iter().cloned().map(|stream| {
+            let livestream_details = LiveStreamDetails {
+                href: format!("https://twitch.tv/{}", stream.user_login),
+                title: stream.title,
+                start_time: stream.started_at.take(),
+                viewers: stream
+                    .viewer_count
+                    .try_into()
+                    .expect("viewer_count should be no larger than a 32 bit integer"),
+            };
 
-    match Event::parse_http(&request) {
-        Ok(Event::StreamOnlineV1(Payload {
-            message: Message::VerificationRequest(VerificationRequest { challenge, .. }),
-            subscription,
-            ..
-        })) => {
-            trace!(?subscription, "verified subscription to new event");
+            (stream.user_login, Some(livestream_details))
+        }));
 
-            (StatusCode::OK, challenge).into_response()
-        }
-        Ok(event) => {
-            warn!(?event, "received unexpected event");
+        live_streams = match previous.get_next(client, token.as_ref()).await {
+            Ok(live_streams) => live_streams,
+            Err(error) => {
+                error!(%error, "failed to get next pagination result");
 
-            StatusCode::NOT_IMPLEMENTED.into_response()
-        }
-        Err(error) => {
-            error!(%error, "encountered error parsing event from http request");
-
-            (
-                StatusCode::BAD_REQUEST,
-                "unable to parse event data from request body",
-            )
-                .into_response()
+                return Some(all_streams);
+            }
         }
     }
+
+    Some(all_streams)
 }

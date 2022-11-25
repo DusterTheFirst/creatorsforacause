@@ -8,7 +8,7 @@ use google_youtube3::api::{VideoListResponse, VideoLiveStreamingDetails, VideoSn
 use once_cell::sync::Lazy;
 use reqwest::{StatusCode, Url};
 use scraper::{Html, Selector};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use time::OffsetDateTime;
 use tokio::{
     sync::watch,
@@ -17,7 +17,7 @@ use tokio::{
 };
 use tracing::{debug, error, info, trace, warn, Instrument};
 
-use crate::web::LiveStreamDetails;
+use crate::web::{LiveStreamDetails, LiveStreamList};
 
 #[derive(Deserialize, Debug)]
 pub struct YoutubeEnvironment {
@@ -44,7 +44,7 @@ pub async fn youtube_live_watcher(
     http_client: reqwest::Client,
     environment: YoutubeEnvironment,
     creators: HashSet<YoutubeHandle>,
-    status_sender: watch::Sender<YoutubeLiveStreams>,
+    status_sender: watch::Sender<LiveStreamList<YoutubeHandle>>,
 ) {
     let api_key = Rc::new(environment.api_key);
 
@@ -52,7 +52,13 @@ pub async fn youtube_live_watcher(
     let refresh_interval = Duration::from_secs(60 * 10);
 
     loop {
-        update_live_statuses(&creators, &http_client, &api_key, &status_sender).await;
+        let live_broadcasts = get_live_statuses(&creators, &http_client, &api_key).await;
+
+        // Send status to web server
+        status_sender.send_replace(LiveStreamList {
+            updated: OffsetDateTime::now_utc(),
+            streams: live_broadcasts,
+        });
 
         // Refresh every 10 minutes
         next_refresh += refresh_interval;
@@ -63,12 +69,11 @@ pub async fn youtube_live_watcher(
 }
 
 #[tracing::instrument(skip_all)]
-async fn update_live_statuses(
+async fn get_live_statuses(
     creators: &HashSet<YoutubeHandle>,
     http_client: &reqwest::Client,
     api_key: &Rc<ApiKey>,
-    status_sender: &watch::Sender<YoutubeLiveStreams>,
-) {
+) -> HashMap<YoutubeHandle, Option<LiveStreamDetails>> {
     let mut set = JoinSet::new();
     for creator in creators.iter().cloned() {
         let http_client = http_client.clone();
@@ -78,16 +83,24 @@ async fn update_live_statuses(
 
         set.spawn_local(
             async move {
-                let video_id = get_livestream_video_id(&http_client, &creator)
-                    .await
-                    .expect("TODO: piss");
+                let video_id = match get_livestream_video_id(&http_client, &creator).await {
+                    Ok(video_id) => {video_id},
+                    Err(error) => {
+                        error!(?error, "failed to get video id");
+                        return None;
+                    },
+                };
 
                 if let Some(video_id) = video_id {
                     debug!(%video_id, "creator has live stream");
 
-                    let video_info = get_video_info(&http_client, &video_id, &api_key)
-                        .await
-                        .expect("TODO: piss");
+                    let video_info = match get_video_info(&http_client, &video_id, &api_key).await {
+                        Ok(video_id) => {video_id},
+                        Err(error) => {
+                            error!(?error, "failed to get video info");
+                            return None;
+                        },
+                    };
 
                     if matches!(
                         video_info.snippet.live_broadcast_content.as_deref(),
@@ -100,7 +113,9 @@ async fn update_live_statuses(
                         let concurrent_viewers = video_info
                             .live_streaming_details
                             .concurrent_viewers
-                            .expect("concurrent_viewers field should be present in liveStreamingDetails");
+                            .expect("concurrent_viewers field should be present in liveStreamingDetails")
+                            .parse()
+                            .expect("concurrent_viewers should be a valid integer");
                         let title = video_info
                             .snippet
                             .title
@@ -110,7 +125,7 @@ async fn update_live_statuses(
                             href: format!("https://youtube.com/watch?v={}", video_id),
                             title,
                             start_time,
-                            concurrent_viewers,
+                            viewers: concurrent_viewers,
                         };
 
                         info!(?livestream_details, "creator is live");
@@ -142,19 +157,7 @@ async fn update_live_statuses(
         }
     }
 
-    // Send status to web server
-    status_sender.send_replace(YoutubeLiveStreams {
-        updated: OffsetDateTime::now_utc(),
-        streams: live_broadcasts,
-    });
-}
-
-#[derive(Debug, Serialize)]
-
-pub struct YoutubeLiveStreams {
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated: OffsetDateTime,
-    pub streams: HashMap<YoutubeHandle, Option<LiveStreamDetails>>,
+    live_broadcasts
 }
 
 struct VideoInfo {
