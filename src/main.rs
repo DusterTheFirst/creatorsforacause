@@ -1,7 +1,9 @@
 #![forbid(clippy::unwrap_used)]
 
 use std::{
+    borrow::Cow,
     collections::{HashMap, HashSet},
+    env,
     net::SocketAddr,
     str::FromStr,
 };
@@ -15,6 +17,7 @@ use opentelemetry::{
     KeyValue,
 };
 use opentelemetry_otlp::WithExportConfig;
+use sentry::SessionMode;
 use serde::Deserialize;
 use time::OffsetDateTime;
 use tokio::{
@@ -22,7 +25,7 @@ use tokio::{
     task::{JoinHandle, LocalSet},
 };
 use tonic::{metadata::MetadataMap, transport::ClientTlsConfig};
-use tracing::{debug, Level};
+use tracing::{trace, Level};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{
     filter::Targets, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
@@ -74,8 +77,23 @@ async fn main() -> color_eyre::Result<()> {
 async fn async_main() -> color_eyre::Result<()> {
     // Try to load .env file, quietly fail
     let dotenv = dotenv::dotenv();
+
     // Install pretty error formatting
     color_eyre::install()?;
+
+    let _guard = sentry::init(sentry::ClientOptions {
+        release: sentry::release_name!(),
+        debug: cfg!(debug_assertions),
+        dsn: env::var("SENTRY_DSN")
+            .ok()
+            .map(|dsn| dsn.parse().expect("SENTRY_DSN should be a valid DSN")),
+        auto_session_tracking: true,
+        session_mode: SessionMode::Application,
+        default_integrations: true,
+        attach_stacktrace: true,
+        server_name: env::var("FLY_REGION").ok().map(Cow::from),
+        ..Default::default()
+    });
 
     // Load environment variables
     let environment: Environment = match envy::from_env() {
@@ -141,10 +159,11 @@ async fn async_main() -> color_eyre::Result<()> {
                         .expect("provided targets should be valid"),
                 ),
         )
+        .with(sentry::integrations::tracing::layer())
         .init();
 
     if let Ok(path) = dotenv {
-        debug!(?path, "Loaded environment variables");
+        trace!(?path, "Loaded environment variables");
     }
 
     // TODO: better file loading
@@ -152,7 +171,7 @@ async fn async_main() -> color_eyre::Result<()> {
     let creators: Creators =
         toml::from_slice(creators.as_slice()).wrap_err("failed to deserialize creators.toml")?;
 
-    dbg!(&creators);
+    trace!(?creators, "loaded creators.toml");
 
     // TODO: more configuration
     let reqwest_client = reqwest::Client::builder()

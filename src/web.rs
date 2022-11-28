@@ -1,6 +1,7 @@
 use std::{collections::HashMap, hash::Hash, net::SocketAddr};
 
 use axum::{extract::State, routing::get, Json, Router, Server};
+use sentry_tower::{SentryHttpLayer, SentryLayer};
 use serde::Serialize;
 use serde_json::{json, Value};
 use time::OffsetDateTime;
@@ -37,7 +38,9 @@ pub async fn web_server(
         .route_service(
             "/status",
             get(status).with_state((youtube_livestreams, twitch_livestreams)),
-        );
+        )
+        .layer(SentryLayer::new_from_top())
+        .layer(SentryHttpLayer::with_transaction());
 
     info!("Starting web server on http://{listen}");
 
