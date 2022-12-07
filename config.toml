@@ -1,0 +1,33 @@
+[campaign]
+id = 468510
+
+[creators]
+twitch = [
+    "gathe_",
+    # "inkierain",
+    "kkywi",
+    "megapigstep",
+    "tridegd",
+    "reapeeron"
+
+    # Test accounts
+    # "linustech",
+    # "xqc",
+    # "loltyler1",
+    # "summit1g",
+    # "amouranth",
+    # "rainbow6",
+    # "bobross",
+]
+
+youtube = [
+    "@ReapeeRon",
+    "@Santaa.",
+
+    # Test accountts
+    # "@LofiGirl",
+    # "@dusterthefirst",
+    # "@therealgathe",
+    # "@ludwig",
+    # "@jaidenanimations"
+]

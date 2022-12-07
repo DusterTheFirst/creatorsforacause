@@ -51,6 +51,17 @@ struct Creators {
 }
 
 #[derive(Deserialize, Debug)]
+struct Config {
+    creators: Creators,
+    campaign: Campaign,
+}
+
+#[derive(Deserialize, Debug, Clone, Copy)]
+pub struct Campaign {
+    id: u64,
+}
+
+#[derive(Deserialize, Debug)]
 struct Environment {
     /// Socket to listen on for the web server
     listen: SocketAddr,
@@ -65,6 +76,9 @@ struct Environment {
 
     #[serde(flatten)]
     youtube: YoutubeEnvironment,
+
+    /// API key for tiltify
+    tiltify_api_key: String,
 }
 
 // Since fly.io is a one core machine, using current thread
@@ -167,13 +181,14 @@ async fn async_main() -> color_eyre::Result<()> {
     }
 
     // TODO: better file loading
-    let creators = std::fs::read("./creators.toml").wrap_err("failed to read creators.toml")?;
-    let creators: Creators =
-        toml::from_slice(creators.as_slice()).wrap_err("failed to deserialize creators.toml")?;
+    let config = std::fs::read("./config.toml").wrap_err("failed to read creators.toml")?;
+    let config: Config =
+        toml::from_slice(config.as_slice()).wrap_err("failed to deserialize creators.toml")?;
 
-    trace!(?creators, "loaded creators.toml");
+    trace!(?config, "loaded config.toml");
 
     // TODO: more configuration
+    // TODO: respect rate limits
     let reqwest_client = reqwest::Client::builder()
         .build()
         .expect("failed to setup http client");
@@ -196,17 +211,20 @@ async fn async_main() -> color_eyre::Result<()> {
     let _: JoinHandle<()> = local_set.spawn_local(twitch_live_watcher(
         reqwest_client.clone(),
         environment.twitch,
-        creators.twitch,
+        config.creators.twitch,
         twitch_live_streams_writer,
     ));
     let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
-        reqwest_client,
+        reqwest_client.clone(),
         environment.youtube,
-        creators.youtube,
+        config.creators.youtube,
         youtube_live_streams_writer,
     ));
     let _: JoinHandle<()> = local_set.spawn_local(web_server(
         environment.listen,
+        reqwest_client,
+        environment.tiltify_api_key,
+        config.campaign,
         youtube_live_streams_reader,
         twitch_live_streams_reader,
     ));

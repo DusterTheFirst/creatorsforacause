@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Creators for a Cause | Live Creators</title>
+
+        <link rel="stylesheet" href="styles.css">
+
+        <!-- <link rel="prefetch" href="https://creatorsforacause.fly.dev" as="fetch"> -->
+
+        <link rel="preload" href="https://unpkg.com/vue@3/dist/vue.esm-browser.js" as="script" />
+
+        <script src="scripts.js" defer type="module"></script>
+    </head>
+    <body>
+        <header>
+            <!-- <iframe src="https://overlays.tiltify.com/cESZE_e4DkCn6MKUWVttdqu8x8lOHlfX" frameborder="0"
+                referrerpolicy="no-referrer" id="tiltify" sandbox="allow-scripts allow-same-origin"></iframe> -->
+        </header>
+        <main>
+            <h1>Creators for a Cause</h1>
+            <section>
+                <h2>Fundraiser</h2>
+                Together we have raised <span id="fundraiser.funds"></span> <span id="fundraiser.currency"></span>
+            </section>
+            <section>
+                <h2>Participating Streamers</h2>
+
+                <section>
+                    <h3>Twitch</h3>
+                    <div id="streams.twitch"></div>
+                </section>
+
+                <section>
+                    <h3>Youtube</h3>
+                    <div id="streams.youtube"></div>
+                </section>
+
+                <template id="streams.template">
+                    <div>
+                        <p>Streamer: <slot name="streamer"></slot>
+                        </p>
+                        <p>Title: <slot name="title"></slot>
+                        </p>
+                        <p>Start Time: <slot name="start-time"></slot>
+                        </p>
+                        <p>Viewers: <slot name="viewers"></slot>
+                        </p>
+                    </div>
+                </template>
+            </section>
+        </main>
+    </body>
+</html>

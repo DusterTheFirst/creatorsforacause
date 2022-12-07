@@ -4,6 +4,7 @@
         "creatorsforacause",
         "eventsub",
         "opentelemetry",
-        "otlp"
+        "otlp",
+        "tiltify"
     ]
 }
