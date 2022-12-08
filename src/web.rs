@@ -1,5 +1,6 @@
 use std::{collections::HashMap, hash::Hash, net::SocketAddr, time::Duration};
 
+use askama::Template;
 use axum::{body::Bytes, extract::State, routing::get, Json, Router, Server};
 use hyper::StatusCode;
 use sentry_tower::{SentryHttpLayer, SentryLayer};
@@ -41,7 +42,11 @@ pub async fn web_server(
     twitch_livestreams: watch::Receiver<LiveStreamList<Nickname>>,
 ) {
     let app = Router::new()
-        .route("/", get(|| async { "OK" }))
+        .route(
+            "/",
+            get(dashboard).with_state((youtube_livestreams.clone(), twitch_livestreams.clone())),
+        )
+        .route("/healthy", get(|| async { "OK" }))
         .route_service(
             "/streams",
             get(streams).with_state((youtube_livestreams, twitch_livestreams)),
@@ -66,6 +71,29 @@ pub async fn web_server(
         .serve(app.into_make_service())
         .await
         .expect("axum server ran into a problem")
+}
+
+#[derive(Debug, Template)]
+#[template(path = "index.html")]
+struct Dashboard {
+    funds: u64,
+    twitch: watch::Receiver<LiveStreamList<Nickname>>,
+    youtube: watch::Receiver<LiveStreamList<YoutubeHandle>>,
+}
+
+#[axum::debug_handler]
+#[tracing::instrument(skip_all)]
+async fn dashboard(
+    State((youtube_status, twitch_live_streams)): State<(
+        watch::Receiver<LiveStreamList<YoutubeHandle>>,
+        watch::Receiver<LiveStreamList<Nickname>>,
+    )>,
+) -> Dashboard {
+    Dashboard {
+        funds: 100,
+        twitch: twitch_live_streams,
+        youtube: youtube_status,
+    }
 }
 
 #[axum::debug_handler]

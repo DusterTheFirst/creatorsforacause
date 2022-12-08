@@ -6,36 +6,41 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Creators for a Cause | Live Creators</title>
 
-        <link rel="stylesheet" href="styles.css">
-
-        <!-- <link rel="prefetch" href="https://creatorsforacause.fly.dev" as="fetch"> -->
-
-        <link rel="preload" href="https://unpkg.com/vue@3/dist/vue.esm-browser.js" as="script" />
-
-        <script src="scripts.js" defer type="module"></script>
+        {# Tomfoolery to make vscode not throw a fit over non-css in a style tag #}
+        {{- "<"|safe -}}{{- "style>"|safe -}}
+        {%- include "include/style.css" -%}
+        {{- "</"|safe -}}{{- "style>"|safe -}}
     </head>
     <body>
-        <header>
-            <!-- <iframe src="https://overlays.tiltify.com/cESZE_e4DkCn6MKUWVttdqu8x8lOHlfX" frameborder="0"
-                referrerpolicy="no-referrer" id="tiltify" sandbox="allow-scripts allow-same-origin"></iframe> -->
-        </header>
         <main>
             <h1>Creators for a Cause</h1>
             <section>
                 <h2>Fundraiser</h2>
-                Together we have raised <span id="fundraiser.funds"></span> <span id="fundraiser.currency"></span>
+                Together we have raised ${{ funds }}
             </section>
             <section>
                 <h2>Participating Streamers</h2>
 
                 <section>
                     <h3>Twitch</h3>
-                    <div id="streams.twitch"></div>
+                    {% let twitch = twitch.borrow() %}
+                    {{ twitch.updated }}
+                    <div>
+                        {% for (streamer, stream) in twitch.streams %}
+                        {{streamer}} {{"{:?}"|format(stream)}}
+                        {% endfor %}
+                    </div>
                 </section>
 
                 <section>
                     <h3>Youtube</h3>
-                    <div id="streams.youtube"></div>
+                    {% let youtube = youtube.borrow() %}
+                    {{ youtube.updated }}
+                    <div>
+                        {% for (streamer, stream) in youtube.streams %}
+                        {{streamer}} {{"{:?}"|format(stream)}}
+                        {% endfor %}
+                    </div>
                 </section>
 
                 <template id="streams.template">

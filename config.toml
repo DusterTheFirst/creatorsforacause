@@ -8,16 +8,15 @@ twitch = [
     "kkywi",
     "megapigstep",
     "tridegd",
-    "reapeeron"
 
     # Test accounts
-    # "linustech",
-    # "xqc",
-    # "loltyler1",
-    # "summit1g",
-    # "amouranth",
-    # "rainbow6",
-    # "bobross",
+    "linustech",
+    "xqc",
+    "loltyler1",
+    "summit1g",
+    "amouranth",
+    "rainbow6",
+    "bobross",
 ]
 
 youtube = [
@@ -25,9 +24,9 @@ youtube = [
     "@Santaa.",
 
     # Test accountts
-    # "@LofiGirl",
-    # "@dusterthefirst",
-    # "@therealgathe",
-    # "@ludwig",
-    # "@jaidenanimations"
+    "@LofiGirl",
+    "@dusterthefirst",
+    "@therealgathe",
+    "@ludwig",
+    "@jaidenanimations"
 ]
