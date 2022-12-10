@@ -21,14 +21,15 @@ use tracing_subscriber::{
     filter::Targets, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
     EnvFilter, Layer, Registry,
 };
-use youtube::{YoutubeEnvironment, YoutubeHandle};
+use twitch::TwitchEnvironment;
+use youtube::{api::YoutubeHandle, YoutubeEnvironment};
 
 use crate::{
-    model::Creators, web::web_server, youtube::youtube_live_watcher,
+    model::Creators, twitch::twitch_live_watcher, web::web_server, youtube::youtube_live_watcher,
 };
 
 mod model;
-// mod twitch;
+mod twitch;
 mod web;
 mod youtube;
 
@@ -59,8 +60,8 @@ struct Environment {
     /// Endpoint for collecting opentelemetry metrics
     otlp_endpoint: String,
 
-    // #[serde(flatten)]
-    // twitch: TwitchEnvironment,
+    #[serde(flatten)]
+    twitch: TwitchEnvironment,
 
     #[serde(flatten)]
     youtube: YoutubeEnvironment,
@@ -75,6 +76,7 @@ async fn main() -> color_eyre::Result<()> {
     async_main().await
 }
 
+// FIXME: color_eyre or better error context providing outside of panics, tracing_error?
 async fn async_main() -> color_eyre::Result<()> {
     // Try to load .env file, quietly fail
     let dotenv = dotenv::dotenv();
@@ -184,12 +186,12 @@ async fn async_main() -> color_eyre::Result<()> {
 
     let (creators, (twitch_writer, youtube_writer)) = Creators::new();
 
-    // let _: JoinHandle<()> = local_set.spawn_local(twitch_live_watcher(
-    //     reqwest_client.clone(),
-    //     environment.twitch,
-    //     config.creators.twitch,
-    //     twitch_writer,
-    // ));
+    let _: JoinHandle<()> = local_set.spawn_local(twitch_live_watcher(
+        reqwest_client.clone(),
+        environment.twitch,
+        config.creators.twitch,
+        twitch_writer,
+    ));
     let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
         reqwest_client.clone(),
         environment.youtube,

@@ -5,7 +5,7 @@ use time::OffsetDateTime;
 use tokio::sync::watch;
 use twitch_api::types::Nickname;
 
-use crate::youtube::YoutubeHandle;
+use crate::youtube::api::YoutubeHandle;
 
 #[derive(Clone)]
 pub struct Creators {
