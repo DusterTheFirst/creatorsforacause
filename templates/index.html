@@ -21,40 +21,50 @@
             <section>
                 <h2>Participating Streamers</h2>
 
+                {% macro creator_card(creator) %}
+                <div>
+                    {#- TODO: placeholder image -#}
+                    <img src="{{creator.icon_url}}" alt="Profile Picture">
+                    <p>Streamer: <a href="{{creator.href}}">{{creator.display_name}}</a></p>
+                    {% if let Some(stream) = creator.stream %}
+                    <p>Title: <a href="{{stream.href}}">{{stream.title}}</a></p>
+                    <p>Start Time: {{stream.start_time}}</p>
+                    <p>Viewers: {{stream.viewers}}</p>
+                    {% endif %}
+                </div>
+                {% endmacro %}
+
                 <section>
                     <h3>Twitch</h3>
-                    {% let twitch = twitch.borrow() %}
+                    {% let twitch = creators.twitch() %}
                     {{ twitch.updated }}
                     <div>
-                        {% for (streamer, stream) in twitch.streams %}
-                        {{streamer}} {{"{:?}"|format(stream)}}
+                        {% for creator in twitch.creators.values() %}
+                        <pre>{{"{:?}"|format(creator)}}</pre>
                         {% endfor %}
                     </div>
                 </section>
 
                 <section>
                     <h3>Youtube</h3>
-                    {% let youtube = youtube.borrow() %}
+                    {% let youtube = creators.youtube() %}
                     {{ youtube.updated }}
+                    <script>
+                        // TODO: Day.js for nice date formatting on the frontend?
+                        const timestamp = {{ youtube.updated.unix_timestamp() }} * 1000;
+
+                        const text = document.createTextNode(new Date(timestamp).toLocaleString());
+                        document.currentScript.after(text);
+                    </script>
                     <div>
-                        {% for (streamer, stream) in youtube.streams %}
-                        {{streamer}} {{"{:?}"|format(stream)}}
+                        {% for creator in youtube.creators.values() %}
+                        <pre>{{"{:?}"|format(creator)}}</pre>
+                        {% call creator_card(creator) %}
                         {% endfor %}
                     </div>
                 </section>
 
-                <template id="streams.template">
-                    <div>
-                        <p>Streamer: <slot name="streamer"></slot>
-                        </p>
-                        <p>Title: <slot name="title"></slot>
-                        </p>
-                        <p>Start Time: <slot name="start-time"></slot>
-                        </p>
-                        <p>Viewers: <slot name="viewers"></slot>
-                        </p>
-                    </div>
-                </template>
+
             </section>
         </main>
     </body>

@@ -1,12 +1,6 @@
 #![forbid(clippy::unwrap_used)]
 
-use std::{
-    borrow::Cow,
-    collections::{HashMap, HashSet},
-    env,
-    net::SocketAddr,
-    str::FromStr,
-};
+use std::{borrow::Cow, collections::HashSet, env, net::SocketAddr, str::FromStr};
 
 use color_eyre::eyre::Context;
 use opentelemetry::{
@@ -19,11 +13,7 @@ use opentelemetry::{
 use opentelemetry_otlp::WithExportConfig;
 use sentry::SessionMode;
 use serde::Deserialize;
-use time::OffsetDateTime;
-use tokio::{
-    sync::watch,
-    task::{JoinHandle, LocalSet},
-};
+use tokio::task::{JoinHandle, LocalSet};
 use tonic::{metadata::MetadataMap, transport::ClientTlsConfig};
 use tracing::{trace, Level};
 use tracing_error::ErrorLayer;
@@ -31,28 +21,26 @@ use tracing_subscriber::{
     filter::Targets, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
     EnvFilter, Layer, Registry,
 };
-use twitch::TwitchEnvironment;
 use youtube::{YoutubeEnvironment, YoutubeHandle};
 
 use crate::{
-    twitch::twitch_live_watcher,
-    web::{web_server, LiveStreamList},
-    youtube::youtube_live_watcher,
+    model::Creators, web::web_server, youtube::youtube_live_watcher,
 };
 
-mod twitch;
+mod model;
+// mod twitch;
 mod web;
 mod youtube;
 
 #[derive(Deserialize, Debug)]
-struct Creators {
+struct CreatorNames {
     twitch: HashSet<twitch_api::types::UserName>,
     youtube: HashSet<YoutubeHandle>,
 }
 
 #[derive(Deserialize, Debug)]
 struct Config {
-    creators: Creators,
+    creators: CreatorNames,
     campaign: Campaign,
 }
 
@@ -71,8 +59,8 @@ struct Environment {
     /// Endpoint for collecting opentelemetry metrics
     otlp_endpoint: String,
 
-    #[serde(flatten)]
-    twitch: TwitchEnvironment,
+    // #[serde(flatten)]
+    // twitch: TwitchEnvironment,
 
     #[serde(flatten)]
     youtube: YoutubeEnvironment,
@@ -81,8 +69,7 @@ struct Environment {
     tiltify_api_key: String,
 }
 
-// Since fly.io is a one core machine, using current thread
-// can remove the need for locking and atomics.
+// Since fly.io is a one core machine, we only need the current thread
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> color_eyre::Result<()> {
     async_main().await
@@ -157,7 +144,7 @@ async fn async_main() -> color_eyre::Result<()> {
 
     // Initialize logging
     Registry::default()
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().pretty())
         .with(
             EnvFilter::builder()
                 .with_default_directive(Level::INFO.into())
@@ -195,38 +182,26 @@ async fn async_main() -> color_eyre::Result<()> {
 
     let local_set = LocalSet::new();
 
-    // We have to use "Sync" channels over Rc<RefCell<_>> since axum requires all state be sync
-    // even though we are guaranteed to be on the same thread (single threaded async runtime)
-    let (youtube_live_streams_writer, youtube_live_streams_reader) =
-        watch::channel(LiveStreamList {
-            updated: OffsetDateTime::UNIX_EPOCH,
-            streams: HashMap::new(),
-        });
+    let (creators, (twitch_writer, youtube_writer)) = Creators::new();
 
-    let (twitch_live_streams_writer, twitch_live_streams_reader) = watch::channel(LiveStreamList {
-        updated: OffsetDateTime::UNIX_EPOCH,
-        streams: HashMap::new(),
-    });
-
-    let _: JoinHandle<()> = local_set.spawn_local(twitch_live_watcher(
-        reqwest_client.clone(),
-        environment.twitch,
-        config.creators.twitch,
-        twitch_live_streams_writer,
-    ));
+    // let _: JoinHandle<()> = local_set.spawn_local(twitch_live_watcher(
+    //     reqwest_client.clone(),
+    //     environment.twitch,
+    //     config.creators.twitch,
+    //     twitch_writer,
+    // ));
     let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
         reqwest_client.clone(),
         environment.youtube,
         config.creators.youtube,
-        youtube_live_streams_writer,
+        youtube_writer,
     ));
     let _: JoinHandle<()> = local_set.spawn_local(web_server(
         environment.listen,
         reqwest_client,
         environment.tiltify_api_key,
         config.campaign,
-        youtube_live_streams_reader,
-        twitch_live_streams_reader,
+        creators,
     ));
 
     local_set.await;

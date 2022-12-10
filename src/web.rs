@@ -1,56 +1,29 @@
-use std::{collections::HashMap, hash::Hash, net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, time::Duration};
 
 use askama::Template;
 use axum::{body::Bytes, extract::State, routing::get, Json, Router, Server};
 use hyper::StatusCode;
 use sentry_tower::{SentryHttpLayer, SentryLayer};
-use serde::Serialize;
 use serde_json::{json, Value};
-use time::OffsetDateTime;
-use tokio::sync::watch;
 use tower_http::{
     catch_panic::CatchPanicLayer, cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer,
 };
 use tracing::{error, info};
-use twitch_api::types::Nickname;
 
-use crate::{youtube::YoutubeHandle, Campaign};
+use crate::{Campaign, Creators};
 
-#[derive(Debug, Serialize)]
-
-pub struct LiveStreamList<Key: Hash + Eq> {
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated: OffsetDateTime,
-    pub streams: HashMap<Key, Option<LiveStreamDetails>>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct LiveStreamDetails {
-    pub href: String,
-    pub title: String,
-    pub start_time: String,
-    pub viewers: u32,
-}
-
-#[tracing::instrument(skip(youtube_livestreams, twitch_livestreams))]
+#[tracing::instrument(skip(creators, http_client, tiltify_api_key))]
 pub async fn web_server(
     listen: SocketAddr,
     http_client: reqwest::Client,
     tiltify_api_key: String,
     campaign: Campaign,
-    youtube_livestreams: watch::Receiver<LiveStreamList<YoutubeHandle>>,
-    twitch_livestreams: watch::Receiver<LiveStreamList<Nickname>>,
+    creators: Creators,
 ) {
     let app = Router::new()
-        .route(
-            "/",
-            get(dashboard).with_state((youtube_livestreams.clone(), twitch_livestreams.clone())),
-        )
+        .route("/", get(dashboard).with_state(creators.clone()))
         .route("/healthy", get(|| async { "OK" }))
-        .route_service(
-            "/streams",
-            get(streams).with_state((youtube_livestreams, twitch_livestreams)),
-        )
+        .route_service("/streams", get(streams).with_state(creators))
         .route_service(
             "/fundraiser",
             get(fundraiser).with_state((tiltify_api_key, campaign, http_client)),
@@ -77,22 +50,15 @@ pub async fn web_server(
 #[template(path = "index.html")]
 struct Dashboard {
     funds: u64,
-    twitch: watch::Receiver<LiveStreamList<Nickname>>,
-    youtube: watch::Receiver<LiveStreamList<YoutubeHandle>>,
+    creators: Creators,
 }
 
 #[axum::debug_handler]
 #[tracing::instrument(skip_all)]
-async fn dashboard(
-    State((youtube_status, twitch_live_streams)): State<(
-        watch::Receiver<LiveStreamList<YoutubeHandle>>,
-        watch::Receiver<LiveStreamList<Nickname>>,
-    )>,
-) -> Dashboard {
+async fn dashboard(State(creators): State<Creators>) -> Dashboard {
     Dashboard {
         funds: 100,
-        twitch: twitch_live_streams,
-        youtube: youtube_status,
+        creators,
     }
 }
 
@@ -124,14 +90,9 @@ async fn fundraiser(
 
 #[axum::debug_handler]
 #[allow(clippy::type_complexity)]
-async fn streams(
-    State((youtube_status, twitch_live_streams)): State<(
-        watch::Receiver<LiveStreamList<YoutubeHandle>>,
-        watch::Receiver<LiveStreamList<Nickname>>,
-    )>,
-) -> Json<Value> {
+async fn streams(State(creators): State<Creators>) -> Json<Value> {
     Json(json!({
-        "youtube": &*youtube_status.borrow(),
-        "twitch": &*twitch_live_streams.borrow(),
+        "youtube": &*creators.youtube(),
+        "twitch": &*creators.twitch(),
     }))
 }

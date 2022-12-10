@@ -16,7 +16,7 @@ use twitch_api::{
     types::{Nickname, UserName},
 };
 
-use crate::web::{LiveStreamDetails, LiveStreamList};
+use crate::model::{CreatorsList, LiveStreamDetails, TwitchSource};
 
 #[derive(Deserialize, Debug)]
 pub struct TwitchEnvironment {
@@ -30,7 +30,7 @@ pub async fn twitch_live_watcher(
     http_client: reqwest::Client,
     environment: TwitchEnvironment,
     creators_names: HashSet<UserName>,
-    status_sender: watch::Sender<LiveStreamList<Nickname>>,
+    status_sender: watch::Sender<CreatorsList<TwitchSource>>,
 ) {
     info!(
         ?creators_names,
@@ -55,10 +55,10 @@ pub async fn twitch_live_watcher(
     let refresh_interval = Duration::from_secs(60 * 10);
 
     loop {
-        if let Some(live_statuses) = get_live_statuses(&client, &creators_names, &token).await {
-            status_sender.send_replace(LiveStreamList {
+        if let Some(creators) = get_live_statuses(&client, &creators_names, &token).await {
+            status_sender.send_replace(CreatorsList {
                 updated: OffsetDateTime::now_utc(),
-                streams: live_statuses,
+                creators,
             });
         } else {
             warn!("no update to the live streams");
@@ -71,6 +71,8 @@ pub async fn twitch_live_watcher(
         tokio::time::sleep_until(next_refresh).await;
     }
 }
+
+async fn get_creators() {}
 
 #[tracing::instrument(skip(client, creators_names, token))]
 async fn get_live_statuses(
