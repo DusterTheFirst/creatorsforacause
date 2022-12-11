@@ -22,14 +22,16 @@
                 <h2>Participating Streamers</h2>
 
                 {% macro creator_card(creator) %}
-                <div>
+                <div class="creator">
                     {#- TODO: placeholder image -#}
                     <img src="{{creator.icon_url}}" alt="Profile Picture">
-                    <p>Streamer: <a href="{{creator.href}}">{{creator.display_name}}</a></p>
+                    <div class="display_name"><a href="{{creator.href}}">{{creator.display_name}}</a></div>
                     {% if let Some(stream) = creator.stream %}
                     <p>Title: <a href="{{stream.href}}">{{stream.title}}</a></p>
                     <p>Start Time: {{stream.start_time}}</p>
                     <p>Viewers: {{stream.viewers}}</p>
+                    {% else %}
+                    NO STREAM
                     {% endif %}
                 </div>
                 {% endmacro %}
@@ -41,6 +43,7 @@
                     <div>
                         {% for creator in twitch.creators.values() %}
                         <pre>{{"{:?}"|format(creator)}}</pre>
+                        {% call creator_card(creator) %}
                         {% endfor %}
                     </div>
                 </section>

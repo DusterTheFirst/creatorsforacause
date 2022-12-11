@@ -51,14 +51,20 @@ pub struct Campaign {
 }
 
 #[derive(Deserialize, Debug)]
-struct Environment {
-    /// Socket to listen on for the web server
-    listen: SocketAddr,
-
+struct OpenTelemetryEnvironment {
     /// API key for honeycomb
     honeycomb_key: String,
     /// Endpoint for collecting opentelemetry metrics
     otlp_endpoint: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct Environment {
+    /// Socket to listen on for the web server
+    listen: SocketAddr,
+
+    #[serde(flatten)]
+    open_telemetry: Option<OpenTelemetryEnvironment>,
 
     #[serde(flatten)]
     twitch: TwitchEnvironment,
@@ -106,64 +112,7 @@ async fn async_main() -> color_eyre::Result<()> {
         e => e.wrap_err("failed to get required environment variables")?,
     };
 
-    // TODO: honeycomb
-    // Open-telemetry
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_trace_config(
-            opentelemetry::sdk::trace::config()
-                .with_sampler(Sampler::AlwaysOn)
-                .with_id_generator(RandomIdGenerator::default())
-                .with_max_events_per_span(64)
-                .with_max_attributes_per_span(16)
-                .with_max_links_per_span(16)
-                .with_resource(Resource::new([KeyValue::new(
-                    opentelemetry_semantic_conventions::resource::SERVICE_NAME,
-                    "creatorsforacause",
-                )])),
-        )
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_tls_config(ClientTlsConfig::new().domain_name("api.honeycomb.io"))
-                .with_endpoint(environment.otlp_endpoint)
-                .with_metadata({
-                    let mut meta = MetadataMap::new();
-
-                    meta.append(
-                        "x-honeycomb-team",
-                        environment
-                            .honeycomb_key
-                            .parse()
-                            .expect("honeycomb_key should be ascii"),
-                    );
-
-                    meta
-                }),
-        )
-        .install_batch(opentelemetry::runtime::TokioCurrentThread)
-        .wrap_err("failed to setup opentelemetry exporter")?;
-
-    // Initialize logging
-    Registry::default()
-        .with(tracing_subscriber::fmt::layer().pretty())
-        .with(
-            EnvFilter::builder()
-                .with_default_directive(Level::INFO.into())
-                .from_env()
-                .wrap_err("failed to parse RUST_LOG")?,
-        )
-        .with(ErrorLayer::default())
-        .with(
-            tracing_opentelemetry::layer()
-                .with_tracer(tracer)
-                .with_filter(
-                    Targets::from_str("creatorsforacause=trace")
-                        .expect("provided targets should be valid"),
-                ),
-        )
-        .with(sentry::integrations::tracing::layer())
-        .init();
+    setup_tracing(environment.open_telemetry)?;
 
     if let Ok(path) = dotenv {
         trace!(?path, "Loaded environment variables");
@@ -207,6 +156,70 @@ async fn async_main() -> color_eyre::Result<()> {
     ));
 
     local_set.await;
+
+    Ok(())
+}
+
+fn setup_tracing(environment: Option<OpenTelemetryEnvironment>) -> Result<(), color_eyre::Report> {
+    let tracer = environment
+        .map(|environment| {
+            opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_trace_config(
+                    opentelemetry::sdk::trace::config()
+                        .with_sampler(Sampler::AlwaysOn)
+                        .with_id_generator(RandomIdGenerator::default())
+                        .with_max_events_per_span(64)
+                        .with_max_attributes_per_span(16)
+                        .with_max_links_per_span(16)
+                        .with_resource(Resource::new([KeyValue::new(
+                            opentelemetry_semantic_conventions::resource::SERVICE_NAME,
+                            "creatorsforacause",
+                        )])),
+                )
+                .with_exporter(
+                    opentelemetry_otlp::new_exporter()
+                        .tonic()
+                        .with_tls_config(ClientTlsConfig::new().domain_name("api.honeycomb.io"))
+                        .with_endpoint(environment.otlp_endpoint)
+                        .with_metadata({
+                            let mut meta = MetadataMap::new();
+
+                            meta.append(
+                                "x-honeycomb-team",
+                                environment
+                                    .honeycomb_key
+                                    .parse()
+                                    .expect("honeycomb_key should be ascii"),
+                            );
+
+                            meta
+                        }),
+                )
+                .install_batch(opentelemetry::runtime::TokioCurrentThread)
+        })
+        .transpose()
+        .wrap_err("failed to setup opentelemetry exporter")?;
+
+    Registry::default()
+        .with(tracing_subscriber::fmt::layer().pretty())
+        .with(
+            EnvFilter::builder()
+                .with_default_directive(Level::INFO.into())
+                .from_env()
+                .wrap_err("failed to parse RUST_LOG")?,
+        )
+        .with(ErrorLayer::default())
+        .with(tracer.map(|tracer| {
+            tracing_opentelemetry::layer()
+                .with_tracer(tracer)
+                .with_filter(
+                    Targets::from_str("creatorsforacause=trace")
+                        .expect("provided targets should be valid"),
+                )
+        }))
+        .with(sentry::integrations::tracing::layer())
+        .init();
 
     Ok(())
 }

@@ -4,19 +4,22 @@ use std::{
 };
 
 use serde::Deserialize;
-use time::OffsetDateTime;
+use time::{format_description::well_known, OffsetDateTime};
 use tokio::{
     sync::watch,
     time::{Duration, Instant},
 };
 use tracing::{error, info, trace, warn};
 use twitch_api::{
-    helix::streams::GetStreamsRequest,
+    helix::{
+        streams::GetStreamsRequest,
+        users::{GetUsersRequest, User},
+    },
     twitch_oauth2::{AppAccessToken, ClientId, ClientSecret, TwitchToken},
     types::{Nickname, UserName},
 };
 
-use crate::model::{CreatorsList, LiveStreamDetails, TwitchSource};
+use crate::model::{Creator, CreatorsList, LiveStreamDetails, TwitchSource};
 
 #[derive(Deserialize, Debug)]
 pub struct TwitchEnvironment {
@@ -55,7 +58,7 @@ pub async fn twitch_live_watcher(
     let refresh_interval = Duration::from_secs(60 * 10);
 
     loop {
-        if let Some(creators) = get_live_statuses(&client, &creators_names, &token).await {
+        if let Some(creators) = get_creators(&client, &creators_names, &token).await {
             status_sender.send_replace(CreatorsList {
                 updated: OffsetDateTime::now_utc(),
                 creators,
@@ -72,14 +75,84 @@ pub async fn twitch_live_watcher(
     }
 }
 
-async fn get_creators() {}
+async fn get_creators(
+    client: &twitch_api::HelixClient<'static, reqwest::Client>,
+    creators_names: &HashSet<Nickname>,
+    token: &Rc<AppAccessToken>,
+) -> Option<HashMap<Nickname, Creator>> {
+    let (users, streams) = tokio::join!(
+        get_user_info(client, creators_names, token),
+        get_live_statuses(client, creators_names, token)
+    );
+
+    let (users, streams) = users.zip(streams)?;
+
+    Some(
+        users
+            .into_iter()
+            .map(|(nickname, user)| {
+                let stream = streams.get(&nickname).cloned();
+
+                (
+                    nickname,
+                    Creator {
+                        display_name: user.display_name.take(),
+                        href: format!("https://twitch.tv/{}", user.login),
+                        icon_url: user
+                            .profile_image_url
+                            // TODO: replace with placeholder?
+                            .expect("twitch streamer should have a profile image url"),
+                        stream,
+                    },
+                )
+            })
+            .collect(),
+    )
+}
+
+async fn get_user_info(
+    client: &twitch_api::HelixClient<'static, reqwest::Client>,
+    creators_names: &HashSet<Nickname>,
+    token: &Rc<AppAccessToken>,
+) -> Option<HashMap<Nickname, User>> {
+    // TODO: split if more than 100 users, lol
+
+    let creators = client
+        .req_get(
+            GetUsersRequest::logins(
+                creators_names
+                    .iter()
+                    .map(|name| name.as_ref())
+                    .collect::<Vec<_>>(),
+            ),
+            token.as_ref(),
+        )
+        .await;
+
+    let creators = match creators {
+        Ok(creators) => creators,
+        Err(error) => {
+            error!(%error, "failed to get livestreams");
+
+            return None;
+        }
+    };
+
+    Some(
+        creators
+            .data
+            .into_iter()
+            .map(|creator| (creator.login.clone(), creator))
+            .collect(),
+    )
+}
 
 #[tracing::instrument(skip(client, creators_names, token))]
 async fn get_live_statuses(
     client: &twitch_api::HelixClient<'static, reqwest::Client>,
     creators_names: &HashSet<Nickname>,
     token: &Rc<AppAccessToken>,
-) -> Option<HashMap<Nickname, Option<LiveStreamDetails>>> {
+) -> Option<HashMap<Nickname, LiveStreamDetails>> {
     let live_streams = client
         .req_get(
             GetStreamsRequest::user_logins(
@@ -87,7 +160,8 @@ async fn get_live_statuses(
                     .iter()
                     .map(|name| name.as_ref())
                     .collect::<Vec<_>>(),
-            ),
+            )
+            .first(100),
             token.as_ref(),
         )
         .await;
@@ -101,11 +175,8 @@ async fn get_live_statuses(
         }
     };
 
-    let mut all_streams: HashMap<Nickname, Option<LiveStreamDetails>> = creators_names
-        .iter()
-        .cloned()
-        .map(|handle| (handle, None))
-        .collect();
+    let mut all_streams: HashMap<Nickname, LiveStreamDetails> =
+        HashMap::with_capacity(creators_names.len());
 
     // Read through pagination
     let mut live_streams = Some(live_streams);
@@ -114,14 +185,15 @@ async fn get_live_statuses(
             let livestream_details = LiveStreamDetails {
                 href: format!("https://twitch.tv/{}", stream.user_login),
                 title: stream.title,
-                start_time: stream.started_at.take(),
+                start_time: OffsetDateTime::parse(stream.started_at.as_str(), &well_known::Rfc3339)
+                    .expect("stream start time should be a well formed rfc3339 date-time"),
                 viewers: stream
                     .viewer_count
                     .try_into()
                     .expect("viewer_count should be no larger than a 32 bit integer"),
             };
 
-            (stream.user_login, Some(livestream_details))
+            (stream.user_login, livestream_details)
         }));
 
         live_streams = match previous.get_next(client, token.as_ref()).await {

@@ -79,14 +79,14 @@ impl CreatorSource for TwitchSource {
     type Identifier = Nickname;
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct CreatorsList<Source: CreatorSource> {
     #[serde(with = "time::serde::rfc3339")]
     pub updated: OffsetDateTime,
     pub creators: HashMap<Source::Identifier, Creator>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct Creator {
     pub display_name: String,
     pub href: String,
@@ -94,7 +94,7 @@ pub struct Creator {
     pub stream: Option<LiveStreamDetails>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct LiveStreamDetails {
     pub href: String,
     pub title: String,

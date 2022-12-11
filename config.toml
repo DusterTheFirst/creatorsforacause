@@ -2,6 +2,7 @@
 id = 468510
 
 [creators]
+# TODO: FIXME: User IDs?
 twitch = [
     "gathe_",
     # "inkierain",
@@ -17,6 +18,7 @@ twitch = [
     "amouranth",
     "rainbow6",
     "bobross",
+    "dusterthefirst",
 ]
 
 youtube = [

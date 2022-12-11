@@ -23,7 +23,14 @@ pub async fn get_livestream_video_id(
 
     // Ensure that the url is a watch (video) url
     if canonical_url.path() != "/watch" {
-        warn!(%canonical_url, "canonical url is not a watch url");
+        if canonical_url
+            .path_segments()
+            .expect("https urls should always be able to be a base")
+            .next()
+            != Some("channel")
+        {
+            warn!(%canonical_url, "canonical url is not a watch url or channel url");
+        }
 
         return Ok(None);
     }
