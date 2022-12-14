@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Debug, hash::Hash};
+use std::{cmp, collections::BTreeSet, fmt::Debug, hash::Hash};
 
 use serde::Serialize;
 use time::OffsetDateTime;
@@ -25,21 +25,19 @@ impl Debug for Creators {
 impl Creators {
     pub fn new() -> (
         Self,
-        (
-            watch::Sender<CreatorsList<TwitchSource>>,
-            watch::Sender<CreatorsList<YoutubeSource>>,
-        ),
+        watch::Sender<CreatorsList<TwitchSource>>,
+        watch::Sender<CreatorsList<YoutubeSource>>,
     ) {
         // We have to use "Sync" channels over Rc<RefCell<_>> since axum requires all state be sync
         // even though we are guaranteed to be on the same thread (single threaded async runtime)
         let (youtube_writer, youtube_reader) = watch::channel(CreatorsList {
             updated: OffsetDateTime::UNIX_EPOCH,
-            creators: HashMap::new(),
+            creators: BTreeSet::new(),
         });
 
         let (twitch_writer, twitch_reader) = watch::channel(CreatorsList {
             updated: OffsetDateTime::UNIX_EPOCH,
-            creators: HashMap::new(),
+            creators: BTreeSet::new(),
         });
 
         (
@@ -47,7 +45,8 @@ impl Creators {
                 twitch: twitch_reader,
                 youtube: youtube_reader,
             },
-            (twitch_writer, youtube_writer),
+            twitch_writer,
+            youtube_writer,
         )
     }
 
@@ -61,37 +60,65 @@ impl Creators {
 }
 
 #[axum::async_trait]
-pub trait CreatorSource {
-    type Identifier: Serialize + Hash + Eq;
+pub trait CreatorSource: Serialize + Debug {
+    type Identifier: Serialize + Hash + Eq + Debug;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct YoutubeSource;
 
 impl CreatorSource for YoutubeSource {
     type Identifier = YoutubeHandle;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct TwitchSource;
 
 impl CreatorSource for TwitchSource {
     type Identifier = Nickname;
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize)]
 pub struct CreatorsList<Source: CreatorSource> {
     #[serde(with = "time::serde::rfc3339")]
     pub updated: OffsetDateTime,
-    pub creators: HashMap<Source::Identifier, Creator>,
+    pub creators: BTreeSet<Creator<Source>>,
 }
 
 #[derive(Debug, Serialize, Clone)]
-pub struct Creator {
+pub struct Creator<Source: CreatorSource> {
+    pub internal_identifier: Source::Identifier,
     pub display_name: String,
     pub href: String,
     pub icon_url: String,
     pub stream: Option<LiveStreamDetails>,
+}
+
+impl<Source: CreatorSource> Eq for Creator<Source> {}
+impl<Source: CreatorSource> PartialEq for Creator<Source> {
+    fn eq(&self, other: &Self) -> bool {
+        self.display_name == other.display_name && self.stream.is_some() == other.stream.is_some()
+    }
+}
+
+impl<Source: CreatorSource + Debug> Ord for Creator<Source> {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        dbg!(
+            (&self.display_name, &other.display_name),
+            (self.stream.is_some(), other.stream.is_some())
+        );
+
+        match (self.stream.is_some(), other.stream.is_some()) {
+            (true, false) => dbg!(cmp::Ordering::Less),
+            (false, true) => dbg!(cmp::Ordering::Greater),
+            (true, true) | (false, false) => self.display_name.cmp(&other.display_name),
+        }
+    }
+}
+impl<Source: CreatorSource + Debug> PartialOrd for Creator<Source> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 #[derive(Debug, Serialize, Clone)]

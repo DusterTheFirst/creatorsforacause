@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeSet, HashSet},
     fmt::Debug,
     rc::Rc,
 };
@@ -62,7 +62,7 @@ async fn get_creators(
     creator_names: &HashSet<YoutubeHandle>,
     http_client: &reqwest::Client,
     api_key: &Rc<ApiKey>,
-) -> HashMap<YoutubeHandle, Creator> {
+) -> BTreeSet<Creator<YoutubeSource>> {
     let mut set = JoinSet::new();
     for creator_name in creator_names.iter().cloned() {
         let http_client = http_client.clone();
@@ -160,12 +160,13 @@ async fn get_creators(
 
                             let livestream_details = livestream_details.await.expect("failed to drive livestream_details to completion");
 
-                            Some((Creator {
+                            Some(Creator {
                                 display_name,
                                 href: format!("https://youtube.com/{creator_name}"),
                                 icon_url,
-                                stream: livestream_details
-                            }, creator_name))
+                                stream: livestream_details,
+                                internal_identifier: creator_name,
+                            })
                         } else {
                             None
                         }
@@ -179,12 +180,12 @@ async fn get_creators(
     }
 
     // Drive all futures to completion, collecting their results
-    let mut live_broadcasts: HashMap<YoutubeHandle, Creator> = HashMap::with_capacity(set.len());
+    let mut live_broadcasts: BTreeSet<Creator<YoutubeSource>> = BTreeSet::new();
 
     while let Some(result) = set.join_next().await {
         match result {
-            Ok(Some((creator, creator_name))) => {
-                live_broadcasts.insert(creator_name, creator);
+            Ok(Some(creator)) => {
+                live_broadcasts.insert(creator);
             }
             Ok(None) => {}
             Err(error) => error!(%error, "failed to drive creator future to completion"),

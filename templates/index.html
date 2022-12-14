@@ -22,14 +22,25 @@
                 <h2>Participating Streamers</h2>
 
                 {% macro creator_card(creator) %}
-                <div class="creator">
+
+                {% let live_class %}
+                {% if creator.stream.is_some() %}
+                {% let live_class = "live" %}
+                {% else %}
+                {% let live_class = "" %}
+                {% endif %}
+
+                <div class="creator {{live_class}}">
                     {#- TODO: placeholder image -#}
-                    <img src="{{creator.icon_url}}" alt="Profile Picture">
-                    <div class="display_name"><a href="{{creator.href}}">{{creator.display_name}}</a></div>
+                    <img src="{{creator.icon_url}}" alt="Profile Picture" loading="lazy">
+                    <h4 class="display_name"><a href="{{creator.href}}">{{creator.display_name}}</a></h4>
                     {% if let Some(stream) = creator.stream %}
-                    <p>Title: <a href="{{stream.href}}">{{stream.title}}</a></p>
-                    <p>Start Time: {{stream.start_time}}</p>
-                    <p>Viewers: {{stream.viewers}}</p>
+                    <div class="stream">
+                        <h5>Stream</h5>
+                        <p>Title: <a href="{{stream.href}}">{{stream.title}}</a></p>
+                        <p>Start Time: {{stream.start_time}}</p>
+                        <p>Viewers: {{stream.viewers}}</p>
+                    </div>
                     {% else %}
                     NO STREAM
                     {% endif %}
@@ -41,8 +52,8 @@
                     {% let twitch = creators.twitch() %}
                     {{ twitch.updated }}
                     <div>
-                        {% for creator in twitch.creators.values() %}
-                        <pre>{{"{:?}"|format(creator)}}</pre>
+                        {% for creator in twitch.creators %}
+                        {# <pre>{{"{:#?}"|format(creator)}}</pre> #}
                         {% call creator_card(creator) %}
                         {% endfor %}
                     </div>
@@ -60,8 +71,8 @@
                         document.currentScript.after(text);
                     </script>
                     <div>
-                        {% for creator in youtube.creators.values() %}
-                        <pre>{{"{:?}"|format(creator)}}</pre>
+                        {% for creator in youtube.creators %}
+                        {# <pre>{{"{:#?}"|format(creator)}}</pre> #}
                         {% call creator_card(creator) %}
                         {% endfor %}
                     </div>

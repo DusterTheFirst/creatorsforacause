@@ -133,7 +133,7 @@ async fn async_main() -> color_eyre::Result<()> {
 
     let local_set = LocalSet::new();
 
-    let (creators, (twitch_writer, youtube_writer)) = Creators::new();
+    let (creators, twitch_writer, youtube_writer) = Creators::new();
 
     let _: JoinHandle<()> = local_set.spawn_local(twitch_live_watcher(
         reqwest_client.clone(),

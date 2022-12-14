@@ -11,14 +11,14 @@ twitch = [
     "tridegd",
 
     # Test accounts
-    "linustech",
-    "xqc",
-    "loltyler1",
-    "summit1g",
-    "amouranth",
-    "rainbow6",
-    "bobross",
-    "dusterthefirst",
+    # "linustech",
+    # "xqc",
+    # "loltyler1",
+    # "summit1g",
+    # "amouranth",
+    # "rainbow6",
+    # "bobross",
+    # "dusterthefirst",
 ]
 
 youtube = [
@@ -26,9 +26,9 @@ youtube = [
     "@Santaa.",
 
     # Test accountts
-    "@LofiGirl",
-    "@dusterthefirst",
-    "@therealgathe",
-    "@ludwig",
-    "@jaidenanimations"
+    # "@LofiGirl",
+    # "@dusterthefirst",
+    # "@therealgathe",
+    # "@ludwig",
+    # "@jaidenanimations"
 ]

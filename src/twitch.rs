@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    rc::Rc,
-};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use serde::Deserialize;
 use time::{format_description::well_known, OffsetDateTime};
@@ -41,23 +38,32 @@ pub async fn twitch_live_watcher(
     );
 
     let client = twitch_api::HelixClient::with_client(http_client);
-    let token = Rc::new(
-        AppAccessToken::get_app_access_token(
-            &client,
-            environment.client_id,
-            environment.client_secret,
-            vec![],
-        )
-        .await
-        .expect("access token should be fetched successfully"),
-    );
+    let mut token = AppAccessToken::get_app_access_token(
+        &client,
+        environment.client_id,
+        environment.client_secret,
+        vec![],
+    )
+    .await
+    .expect("access token should be fetched successfully");
 
-    info!(expires_in = ?token.expires_in(), "Acquired access token");
+    info!(expires_in = ?token.expires_in(), "acquired access token");
 
     let mut next_refresh = Instant::now();
-    let refresh_interval = Duration::from_secs(60 * 10);
+    let refresh_interval = Duration::from_secs(10 * 60); // 10 minutes
 
     loop {
+        tokio::time::sleep_until(next_refresh).await;
+
+        if token.is_elapsed() {
+            match token.refresh_token(&client).await {
+                Ok(()) => trace!(expires_in = ?token.expires_in(), "refreshed access token"),
+                Err(error) => {
+                    error!(%error, "failed to refresh twitch access token");
+                }
+            };
+        }
+
         if let Some(creators) = get_creators(&client, &creators_names, &token).await {
             status_sender.send_replace(CreatorsList {
                 updated: OffsetDateTime::now_utc(),
@@ -70,16 +76,14 @@ pub async fn twitch_live_watcher(
         // Refresh every 10 minutes
         next_refresh += refresh_interval;
         trace!(?refresh_interval, "Waiting for next refresh");
-
-        tokio::time::sleep_until(next_refresh).await;
     }
 }
 
 async fn get_creators(
     client: &twitch_api::HelixClient<'static, reqwest::Client>,
     creators_names: &HashSet<Nickname>,
-    token: &Rc<AppAccessToken>,
-) -> Option<HashMap<Nickname, Creator>> {
+    token: &AppAccessToken,
+) -> Option<BTreeSet<Creator<TwitchSource>>> {
     let (users, streams) = tokio::join!(
         get_user_info(client, creators_names, token),
         get_live_statuses(client, creators_names, token)
@@ -91,20 +95,16 @@ async fn get_creators(
         users
             .into_iter()
             .map(|(nickname, user)| {
-                let stream = streams.get(&nickname).cloned();
-
-                (
-                    nickname,
-                    Creator {
-                        display_name: user.display_name.take(),
-                        href: format!("https://twitch.tv/{}", user.login),
-                        icon_url: user
-                            .profile_image_url
-                            // TODO: replace with placeholder?
-                            .expect("twitch streamer should have a profile image url"),
-                        stream,
-                    },
-                )
+                Creator {
+                    display_name: user.display_name.take(),
+                    href: format!("https://twitch.tv/{}", user.login),
+                    icon_url: user
+                        .profile_image_url
+                        // TODO: replace with placeholder?
+                        .expect("twitch streamer should have a profile image url"),
+                    stream: streams.get(&nickname).cloned(),
+                    internal_identifier: nickname,
+                }
             })
             .collect(),
     )
@@ -113,7 +113,7 @@ async fn get_creators(
 async fn get_user_info(
     client: &twitch_api::HelixClient<'static, reqwest::Client>,
     creators_names: &HashSet<Nickname>,
-    token: &Rc<AppAccessToken>,
+    token: &AppAccessToken,
 ) -> Option<HashMap<Nickname, User>> {
     // TODO: split if more than 100 users, lol
 
@@ -125,7 +125,7 @@ async fn get_user_info(
                     .map(|name| name.as_ref())
                     .collect::<Vec<_>>(),
             ),
-            token.as_ref(),
+            token,
         )
         .await;
 
@@ -151,7 +151,7 @@ async fn get_user_info(
 async fn get_live_statuses(
     client: &twitch_api::HelixClient<'static, reqwest::Client>,
     creators_names: &HashSet<Nickname>,
-    token: &Rc<AppAccessToken>,
+    token: &AppAccessToken,
 ) -> Option<HashMap<Nickname, LiveStreamDetails>> {
     let live_streams = client
         .req_get(
@@ -162,7 +162,7 @@ async fn get_live_statuses(
                     .collect::<Vec<_>>(),
             )
             .first(100),
-            token.as_ref(),
+            token,
         )
         .await;
 
@@ -196,7 +196,7 @@ async fn get_live_statuses(
             (stream.user_login, livestream_details)
         }));
 
-        live_streams = match previous.get_next(client, token.as_ref()).await {
+        live_streams = match previous.get_next(client, token).await {
             Ok(live_streams) => live_streams,
             Err(error) => {
                 error!(%error, "failed to get next pagination result");

@@ -3,4 +3,21 @@ body {
     margin: 0;
     background-color: #222222;
     color: #ffffff;
+    touch-action: manipulation;
+}
+
+.creator {
+    border: white solid 2px;
+}
+
+.creator img {
+    width: 50px;
+}
+
+.creator .display_name a {
+    color: white;
+}
+
+.creator .stream a {
+    color: white;
 }

@@ -27,6 +27,6 @@ FROM gcr.io/distroless/cc AS runtime
 COPY --from=builder \
     /app/target/release/creatorsforacause \
     /
-COPY creators.toml .
+COPY config.toml .
 
 CMD [ "/creatorsforacause" ]
