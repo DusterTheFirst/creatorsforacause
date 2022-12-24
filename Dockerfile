@@ -3,10 +3,6 @@ FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 # Apt dependencies
 RUN apt update && apt install -y protobuf-compiler
 
-# Git crates.io patches
-RUN git clone --recurse-submodules https://github.com/twitch-rs/twitch_api.git && \
-    cd twitch_api && git checkout 514d84c4d8926e28b0207fa01aac2cc3e8f2f5a8
-
 WORKDIR /app
 
 FROM chef AS planner

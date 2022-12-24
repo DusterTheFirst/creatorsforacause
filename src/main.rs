@@ -13,7 +13,6 @@ use opentelemetry::{
 use opentelemetry_otlp::WithExportConfig;
 use sentry::SessionMode;
 use serde::Deserialize;
-use tokio::task::{JoinHandle, LocalSet};
 use tonic::{metadata::MetadataMap, transport::ClientTlsConfig};
 use tracing::{trace, Level};
 use tracing_error::ErrorLayer;
@@ -131,31 +130,29 @@ async fn async_main() -> color_eyre::Result<()> {
         .build()
         .expect("failed to setup http client");
 
-    let local_set = LocalSet::new();
-
     let (creators, twitch_writer, youtube_writer) = Creators::new();
 
-    let _: JoinHandle<()> = local_set.spawn_local(twitch_live_watcher(
-        reqwest_client.clone(),
-        environment.twitch,
-        config.creators.twitch,
-        twitch_writer,
-    ));
-    let _: JoinHandle<()> = local_set.spawn_local(youtube_live_watcher(
-        reqwest_client.clone(),
-        environment.youtube,
-        config.creators.youtube,
-        youtube_writer,
-    ));
-    let _: JoinHandle<()> = local_set.spawn_local(web_server(
-        environment.listen,
-        reqwest_client,
-        environment.tiltify_api_key,
-        config.campaign,
-        creators,
-    ));
-
-    local_set.await;
+    tokio::join!(
+        twitch_live_watcher(
+            reqwest_client.clone(),
+            environment.twitch,
+            config.creators.twitch,
+            twitch_writer,
+        ),
+        youtube_live_watcher(
+            reqwest_client.clone(),
+            environment.youtube,
+            config.creators.youtube,
+            youtube_writer,
+        ),
+        web_server(
+            environment.listen,
+            reqwest_client,
+            environment.tiltify_api_key,
+            config.campaign,
+            creators,
+        )
+    );
 
     Ok(())
 }

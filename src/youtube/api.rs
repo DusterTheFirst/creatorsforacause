@@ -40,7 +40,7 @@ pub struct CreatorInfo {
 #[tracing::instrument(skip(http_client, api_key))]
 pub async fn get_creator_info(
     http_client: &reqwest::Client,
-    api_key: &ApiKey,
+    api_key: &ApiKeyRef,
     channel_id: ChannelId,
 ) -> Result<CreatorInfo, WebError> {
     // Channel API endpoint
@@ -110,7 +110,7 @@ pub struct VideoInfo {
 #[tracing::instrument(skip(http_client, api_key))]
 pub async fn get_video_info(
     http_client: &reqwest::Client,
-    api_key: &ApiKey,
+    api_key: &ApiKeyRef,
     video_id: &VideoIdRef,
 ) -> Result<VideoInfo, WebError> {
     // Video API endpoint
