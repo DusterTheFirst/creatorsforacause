@@ -63,7 +63,7 @@ pub static CONFIG: Config = Config {
             #[cfg(debug_assertions)]
             YoutubeHandleRef::from_str("@ludwig"),
             #[cfg(debug_assertions)]
-            YoutubeHandleRef::from_str("@jaidenanimations")
+            YoutubeHandleRef::from_str("@jaidenanimations"),
         ],
     },
 };

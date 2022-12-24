@@ -24,7 +24,7 @@ use twitch::TwitchEnvironment;
 use youtube::YoutubeEnvironment;
 
 use crate::{
-    config::CONFIG, model::Creators, twitch::twitch_live_watcher, web::web_server,
+    config::CONFIG, model::CreatorsWatcher, twitch::twitch_live_watcher, web::web_server,
     youtube::youtube_live_watcher,
 };
 
@@ -110,7 +110,7 @@ async fn async_main() -> color_eyre::Result<()> {
         .build()
         .expect("failed to setup http client");
 
-    let (creators, twitch_writer, youtube_writer) = Creators::new();
+    let (creators, twitch_writer, youtube_writer) = CreatorsWatcher::new();
 
     tokio::join!(
         twitch_live_watcher(

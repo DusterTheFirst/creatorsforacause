@@ -5,12 +5,12 @@ use time::OffsetDateTime;
 use tokio::sync::watch;
 
 #[derive(Clone)]
-pub struct Creators {
+pub struct CreatorsWatcher {
     twitch: watch::Receiver<CreatorsList>,
     youtube: watch::Receiver<CreatorsList>,
 }
 
-impl Debug for Creators {
+impl Debug for CreatorsWatcher {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Creators")
             .field("twitch", &self.twitch.borrow())
@@ -19,7 +19,7 @@ impl Debug for Creators {
     }
 }
 
-impl Creators {
+impl CreatorsWatcher {
     pub fn new() -> (
         Self,
         watch::Sender<CreatorsList>,

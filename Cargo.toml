@@ -15,6 +15,9 @@ askama = { git = "https://github.com/djc/askama", version = "^0.11", default_fea
 askama_axum = { git = "https://github.com/djc/askama", version = "^0.1", default_features = false }
 axum = { version = "0.6.1", features = ["macros"] }
 color-eyre = "^0.6"
+dioxus = { git = "https://github.com/DioxusLabs/dioxus", version = "0.2.4" }
+dioxus-liveview = { git = "https://github.com/DioxusLabs/dioxus", version = "0.1.0", features = ["axum"] }
+dioxus-ssr = { git = "https://github.com/DioxusLabs/dioxus", version = "0.2.1" }
 dotenv = "^0.15"
 envy = "^0.4"
 futures = "^0.3"
