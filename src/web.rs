@@ -10,7 +10,7 @@ use tower_http::{
 };
 use tracing::{error, info};
 
-use crate::{Campaign, Creators};
+use crate::{config::Campaign, Creators};
 
 #[tracing::instrument(skip(creators, http_client, tiltify_api_key))]
 pub async fn web_server(

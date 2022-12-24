@@ -1,6 +1,6 @@
 #![forbid(clippy::unwrap_used)]
 
-use std::{borrow::Cow, collections::HashSet, env, net::SocketAddr, str::FromStr};
+use std::{borrow::Cow, env, net::SocketAddr, str::FromStr};
 
 use color_eyre::eyre::Context;
 use opentelemetry::{
@@ -21,33 +21,18 @@ use tracing_subscriber::{
     EnvFilter, Layer, Registry,
 };
 use twitch::TwitchEnvironment;
-use youtube::{api::YoutubeHandle, YoutubeEnvironment};
+use youtube::YoutubeEnvironment;
 
 use crate::{
-    model::Creators, twitch::twitch_live_watcher, web::web_server, youtube::youtube_live_watcher,
+    config::CONFIG, model::Creators, twitch::twitch_live_watcher, web::web_server,
+    youtube::youtube_live_watcher,
 };
 
+mod config;
 mod model;
 mod twitch;
 mod web;
 mod youtube;
-
-#[derive(Deserialize, Debug)]
-struct CreatorNames {
-    twitch: HashSet<twitch_api::types::UserName>,
-    youtube: HashSet<YoutubeHandle>,
-}
-
-#[derive(Deserialize, Debug)]
-struct Config {
-    creators: CreatorNames,
-    campaign: Campaign,
-}
-
-#[derive(Deserialize, Debug, Clone, Copy)]
-pub struct Campaign {
-    id: u64,
-}
 
 #[derive(Deserialize, Debug)]
 struct OpenTelemetryEnvironment {
@@ -117,12 +102,7 @@ async fn async_main() -> color_eyre::Result<()> {
         trace!(?path, "Loaded environment variables");
     }
 
-    // TODO: better file loading
-    let config = std::fs::read("./config.toml").wrap_err("failed to read creators.toml")?;
-    let config: Config =
-        toml::from_slice(config.as_slice()).wrap_err("failed to deserialize creators.toml")?;
-
-    trace!(?config, "loaded config.toml");
+    trace!(?CONFIG, "static config set");
 
     // TODO: more configuration
     // TODO: respect rate limits
@@ -136,20 +116,20 @@ async fn async_main() -> color_eyre::Result<()> {
         twitch_live_watcher(
             reqwest_client.clone(),
             environment.twitch,
-            config.creators.twitch,
+            CONFIG.creators.twitch,
             twitch_writer,
         ),
         youtube_live_watcher(
             reqwest_client.clone(),
             environment.youtube,
-            config.creators.youtube,
+            CONFIG.creators.youtube,
             youtube_writer,
         ),
         web_server(
             environment.listen,
             reqwest_client,
             environment.tiltify_api_key,
-            config.campaign,
+            CONFIG.campaign,
             creators,
         )
     );

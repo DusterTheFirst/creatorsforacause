@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use serde::Deserialize;
 use time::{format_description::well_known, OffsetDateTime};
@@ -13,7 +13,7 @@ use twitch_api::{
         users::{GetUsersRequest, User},
     },
     twitch_oauth2::{AppAccessToken, ClientId, ClientSecret, TwitchToken},
-    types::{Nickname, NicknameRef, UserName},
+    types::{Nickname, NicknameRef},
 };
 
 use crate::model::{Creator, CreatorsList, LiveStreamDetails};
@@ -29,14 +29,9 @@ pub struct TwitchEnvironment {
 pub async fn twitch_live_watcher(
     http_client: reqwest::Client,
     environment: TwitchEnvironment,
-    creators_names: HashSet<UserName>,
+    creators_names: &[&NicknameRef],
     status_sender: watch::Sender<CreatorsList>,
 ) {
-    let creators_names = creators_names
-        .iter()
-        .map(|nickname| nickname.as_ref())
-        .collect::<Box<_>>();
-
     info!(
         ?creators_names,
         "Starting live status watch of twitch creators"
@@ -69,7 +64,7 @@ pub async fn twitch_live_watcher(
             };
         }
 
-        if let Some(creators) = get_creators(&client, &creators_names, &token).await {
+        if let Some(creators) = get_creators(&client, creators_names, &token).await {
             status_sender.send_replace(CreatorsList {
                 updated: OffsetDateTime::now_utc(),
                 creators,

@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Debug, rc::Rc};
+use std::{fmt::Debug, rc::Rc};
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::Deserialize;
@@ -13,10 +13,7 @@ use tracing::{debug, error, info, trace, warn, Instrument};
 use crate::model::{Creator, CreatorsList, LiveStreamDetails};
 
 use self::{
-    api::{
-        get_creator_info, get_video_info, ApiKey, ApiKeyRef, CreatorInfo, YoutubeHandle,
-        YoutubeHandleRef,
-    },
+    api::{get_creator_info, get_video_info, ApiKey, ApiKeyRef, CreatorInfo, YoutubeHandleRef},
     scraping::{get_channel_id, get_livestream_video_id},
 };
 
@@ -32,21 +29,16 @@ pub struct YoutubeEnvironment {
 pub async fn youtube_live_watcher(
     http_client: reqwest::Client,
     environment: YoutubeEnvironment,
-    creators: HashSet<YoutubeHandle>,
+    creators: &[&YoutubeHandleRef],
     status_sender: watch::Sender<CreatorsList>,
 ) {
-    let creators = creators
-        .iter()
-        .map(|handle| handle.as_ref())
-        .collect::<Box<_>>();
-
     let api_key = Rc::new(environment.api_key);
 
     let mut next_refresh = Instant::now();
     let refresh_interval = Duration::from_secs(60 * 10);
 
     loop {
-        let creators = get_creators(&creators, &http_client, &api_key).await;
+        let creators = get_creators(creators, &http_client, &api_key).await;
 
         // Send status to web server
         status_sender.send_replace(CreatorsList {

@@ -16,7 +16,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build application
 COPY . .
-RUN cargo build --release
+RUN cargo build --release --target-cpu native
 
 FROM gcr.io/distroless/cc AS runtime
 
