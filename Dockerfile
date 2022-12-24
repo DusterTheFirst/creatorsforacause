@@ -16,13 +16,12 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build application
 COPY . .
-RUN cargo build --release --target-cpu native
+RUN cargo build --release
 
 FROM gcr.io/distroless/cc AS runtime
 
 COPY --from=builder \
     /app/target/release/creatorsforacause \
     /
-COPY config.toml .
 
 CMD [ "/creatorsforacause" ]
