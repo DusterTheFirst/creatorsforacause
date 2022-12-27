@@ -6,7 +6,14 @@ body {
     touch-action: manipulation;
 }
 
+.creators {
+    display: flex;
+    flex-wrap: wrap;
+}
+
 .creator {
+    width: 20em;
+
     border: white solid 2px;
 }
 
@@ -24,4 +31,8 @@ body {
 
 .creator .stream a {
     color: white;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    /* FIXME: Cut off if too long */
 }
