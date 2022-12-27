@@ -67,8 +67,17 @@ mod live_view {
             .route(
                 "/",
                 get(move || async move {
+                    #[cfg(debug_assertions)]
+                    let domain = &format!("ws://{listen}/ws");
+
+                    #[cfg(not(debug_assertions))]
+                    let _ = listen;
+                    #[cfg(not(debug_assertions))]
+                    let domain = "wss://creatorsforacause.fly.dev/ws";
+
                     Dashboard {
-                        glue: dioxus_liveview::interpreter_glue(&format!("ws://{listen}/ws")),
+                        // FIXME: wss on https, and use correct domain.
+                        glue: dioxus_liveview::interpreter_glue(domain),
                     }
                 }),
             )
