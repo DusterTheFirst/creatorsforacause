@@ -1,7 +1,7 @@
 FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
 
 # Apt dependencies
-RUN apt update && apt install -y protobuf-compiler
+RUN apt update && apt install -y protobuf-compiler lld
 
 WORKDIR /app
 
