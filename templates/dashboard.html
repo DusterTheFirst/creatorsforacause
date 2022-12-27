@@ -5,11 +5,15 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Creators for a Cause | Live Creators</title>
+
+        {# Tomfoolery to make vscode not throw a fit over non-css in a style tag #}
+        {{- "<"|safe -}}{{- "style>"|safe -}}
+        {%- include "include/style.css" -%}
+        {{- "</"|safe -}}{{- "style>"|safe -}}
     </head>
     <body>
-        <div id="main">
-            {{ ssr|safe }}
-        </div>
+        <noscript>Javascript must be enabled to use this website</noscript>
+        <div id="main"></div>
     </body>
     {{ glue|safe }}
 </html>

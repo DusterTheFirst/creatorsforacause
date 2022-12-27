@@ -41,8 +41,6 @@ pub static CONFIG: Config = Config {
             #[cfg(debug_assertions)]
             NicknameRef::from_str("summit1g"),
             #[cfg(debug_assertions)]
-            NicknameRef::from_str("amouranth"),
-            #[cfg(debug_assertions)]
             NicknameRef::from_str("rainbow6"),
             #[cfg(debug_assertions)]
             NicknameRef::from_str("bobross"),

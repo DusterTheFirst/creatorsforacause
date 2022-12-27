@@ -46,20 +46,18 @@ pub async fn web_server(
 }
 
 mod live_view {
-    use std::{cell::RefCell, net::SocketAddr};
+    use std::net::SocketAddr;
 
     use askama::Template;
     use axum::{extract::WebSocketUpgrade, routing::get, Router};
     use dioxus::prelude::*;
-    use dioxus_ssr::Renderer;
 
-    use crate::model::CreatorsWatcher;
+    use crate::model::{Creator, CreatorsList, CreatorsWatcher};
 
     #[derive(Debug, Template)]
     #[template(path = "dashboard.html")]
     struct Dashboard {
         glue: String,
-        ssr: String,
     }
 
     pub(super) fn router(listen: SocketAddr, creators: CreatorsWatcher) -> Router {
@@ -68,61 +66,124 @@ mod live_view {
         Router::new()
             .route(
                 "/",
-                get({
-                    let creators = creators.clone();
-                    move || async move {
-                        fn renderer() -> Renderer {
-                            let mut renderer = Renderer::default();
-
-                            renderer.pretty = false;
-                            renderer.newline = false;
-                            renderer.sanitize = true;
-                            renderer.pre_render = true;
-                            renderer.skip_components = false;
-
-                            renderer
-                        }
-
-                        thread_local! {
-                            static RENDERER: RefCell<Renderer> = RefCell::new(renderer());
-                        }
-
-                        let mut vdom = VirtualDom::new_with_props(dashboard, creators);
-
-                        let _ = vdom.rebuild();
-
-                        Dashboard {
-                            glue: dioxus_liveview::interpreter_glue(&format!("ws://{listen}/ws")),
-                            ssr: RENDERER.with(|renderer| {
-                                renderer
-                                    .borrow_mut()
-                                    .render(&vdom)
-                            }),
-                        }
+                get(move || async move {
+                    Dashboard {
+                        glue: dioxus_liveview::interpreter_glue(&format!("ws://{listen}/ws")),
                     }
                 }),
             )
             .route(
                 "/ws",
                 get(move |ws: WebSocketUpgrade| async move {
-                    ws.on_upgrade(move |socket| async move {
-                        _ = view
-                            .launch_with_props(
-                                dioxus_liveview::axum_socket(socket),
-                                dashboard,
-                                creators,
-                            )
-                            .await;
+                    ws.on_upgrade(move |socket| {
+                        let twitch = creators.twitch().borrow().clone();
+                        let youtube = creators.youtube().borrow().clone();
+
+                        async move {
+                            _ = view
+                                .launch_with_props(
+                                    dioxus_liveview::axum_socket(socket),
+                                    dashboard,
+                                    DashboardProps { twitch, youtube },
+                                )
+                                .await;
+                        }
                     })
                 }),
             )
     }
 
-    #[tracing::instrument(skip_all)]
-    pub(super) fn dashboard(cx: Scope<CreatorsWatcher>) -> Element {
+    #[derive(Debug, Props)]
+    struct CreatorCardProps<'c> {
+        creator: &'c Creator,
+    }
+
+    fn creator_card<'s>(cx: Scope<'s, CreatorCardProps<'s>>) -> Element<'s> {
+        let creator = cx.props.creator;
+
+        let class = if creator.stream.is_some() {
+            "creator live"
+        } else {
+            "creator"
+        };
+
         cx.render(rsx! {
             div {
-                "hello axum!"
+                class: class,
+                img {
+                    src: "{creator.icon_url}",
+                    alt: "Profile Picture",
+                    // loading: "lazy",
+                }
+                h4 {
+                    class: "display_name",
+                    a {
+                        href: "{creator.href}",
+                        "{creator.display_name}"
+                    }
+                }
+                {
+                    creator.stream.as_ref().map(|stream| {
+                        rsx! {
+                            div {
+                                h5 { "Stream" }
+                                p { "Title: " a { href: "{stream.href}", "{stream.title}" } }
+                                p {"Start Time: {stream.start_time}"}
+                                p {"Viewers: {stream.viewers}"}
+                            }
+                        }
+                    })
+                }
+            }
+        })
+    }
+
+    #[derive(Debug, Props, PartialEq, Eq)]
+    pub struct DashboardProps {
+        pub twitch: CreatorsList,
+        pub youtube: CreatorsList,
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub(super) fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
+        let funds = 0;
+
+        cx.render(rsx! {
+            main {
+                h1 { "Creators for a Cause" }
+                section {
+                    h2 { "Fundraiser" }
+                    p { "Together we have raised ${funds}"}
+                }
+                section {
+                    h2 { "Participating Streamers" }
+                    section {
+                        h3 { "Twitch" }
+                        pre { "{cx.props.twitch.updated}" }
+                        div {
+                            {
+                                cx.props.twitch.creators.iter().map(|creator| {
+                                    cx.render(rsx! {
+                                        creator_card { creator: creator, }
+                                    })
+                                })
+                            }
+                        }
+                    }
+                    section {
+                        h3 { "Youtube" }
+                        pre { "{cx.props.youtube.updated}" }
+                        div {
+                            {
+                                cx.props.youtube.creators.iter().map(|creator| {
+                                    cx.render(rsx! {
+                                        creator_card { creator: creator, }
+                                    })
+                                })
+                            }
+                        }
+                    }
+                }
             }
         })
     }
@@ -158,7 +219,7 @@ async fn fundraiser(
 #[allow(clippy::type_complexity)]
 async fn streams(State(creators): State<CreatorsWatcher>) -> Json<Value> {
     Json(json!({
-        "youtube": &*creators.youtube(),
-        "twitch": &*creators.twitch(),
+        "youtube": &*creators.youtube().borrow(),
+        "twitch": &*creators.twitch().borrow(),
     }))
 }

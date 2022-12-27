@@ -1,4 +1,4 @@
-use std::{cmp, fmt::Debug};
+use std::{cmp, fmt::Debug, sync::Arc};
 
 use serde::Serialize;
 use time::OffsetDateTime;
@@ -8,15 +8,6 @@ use tokio::sync::watch;
 pub struct CreatorsWatcher {
     twitch: watch::Receiver<CreatorsList>,
     youtube: watch::Receiver<CreatorsList>,
-}
-
-impl Debug for CreatorsWatcher {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Creators")
-            .field("twitch", &self.twitch.borrow())
-            .field("youtube", &self.youtube.borrow())
-            .finish()
-    }
 }
 
 impl CreatorsWatcher {
@@ -29,12 +20,12 @@ impl CreatorsWatcher {
         // even though we are guaranteed to be on the same thread (single threaded async runtime)
         let (youtube_writer, youtube_reader) = watch::channel(CreatorsList {
             updated: OffsetDateTime::UNIX_EPOCH,
-            creators: Box::new([]),
+            creators: Arc::new([]),
         });
 
         let (twitch_writer, twitch_reader) = watch::channel(CreatorsList {
             updated: OffsetDateTime::UNIX_EPOCH,
-            creators: Box::new([]),
+            creators: Arc::new([]),
         });
 
         (
@@ -47,23 +38,23 @@ impl CreatorsWatcher {
         )
     }
 
-    pub fn twitch(&self) -> watch::Ref<CreatorsList> {
-        self.twitch.borrow()
+    pub fn twitch(&self) -> watch::Receiver<CreatorsList> {
+        self.twitch.clone()
     }
 
-    pub fn youtube(&self) -> watch::Ref<CreatorsList> {
-        self.youtube.borrow()
+    pub fn youtube(&self) -> watch::Receiver<CreatorsList> {
+        self.youtube.clone()
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
 pub struct CreatorsList {
     #[serde(with = "time::serde::rfc3339")]
     pub updated: OffsetDateTime,
-    pub creators: Box<[Creator]>,
+    pub creators: Arc<[Creator]>,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize)]
 pub struct Creator {
     pub display_name: String,
     pub href: String,

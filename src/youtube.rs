@@ -1,4 +1,4 @@
-use std::{fmt::Debug, rc::Rc};
+use std::{fmt::Debug, rc::Rc, sync::Arc};
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::Deserialize;
@@ -43,7 +43,7 @@ pub async fn youtube_live_watcher(
         // Send status to web server
         status_sender.send_replace(CreatorsList {
             updated: OffsetDateTime::now_utc(),
-            creators,
+            creators: Arc::from(creators),
         });
 
         // Refresh every 10 minutes
@@ -186,7 +186,7 @@ async fn get_livestream_details(
             .expect("title should be present in snippet");
 
         let livestream_details = LiveStreamDetails {
-            href: format!("https://youtube.com/watch?v={}", video_id),
+            href: format!("https://youtube.com/watch?v={video_id}"),
             title,
             start_time: OffsetDateTime::parse(&start_time, &well_known::Rfc3339)
                 .expect("start_time should be a valid RFC3339 date-time"),

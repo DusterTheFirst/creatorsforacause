@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
 use time::{format_description::well_known, OffsetDateTime};
@@ -67,7 +67,7 @@ pub async fn twitch_live_watcher(
         if let Some(creators) = get_creators(&client, creators_names, &token).await {
             status_sender.send_replace(CreatorsList {
                 updated: OffsetDateTime::now_utc(),
-                creators,
+                creators: Arc::from(creators),
             });
         } else {
             warn!("no update to the live streams");
