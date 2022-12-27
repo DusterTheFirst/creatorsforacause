@@ -1,6 +1,10 @@
 use dioxus::prelude::*;
+use tokio::sync::watch;
 
-use crate::model::{Creator, CreatorsList};
+use crate::{
+    model::Creator,
+    watcher::{WatcherData, WatcherDataReceive},
+};
 
 #[derive(Debug, Props)]
 pub struct CreatorCardProps<'c> {
@@ -62,54 +66,70 @@ pub fn creator_card<'s>(cx: Scope<'s, CreatorCardProps<'s>>) -> Element<'s> {
     })
 }
 
-#[derive(Debug, Props, PartialEq, Eq)]
+#[derive(Debug)]
 pub struct DashboardProps {
-    pub twitch: CreatorsList,
-    pub youtube: CreatorsList,
+    pub watched_data: watch::Receiver<WatcherDataReceive>,
 }
 
 #[tracing::instrument(skip_all)]
 pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
     let funds = 0;
 
-    cx.render(rsx! {
-        main {
-            h1 { "Creators for a Cause" }
-            section {
-                h2 { "Fundraiser" }
-                p { "Together we have raised ${funds}"}
-            }
-            section {
-                h2 { "Participating Streamers" }
+    // use_future(cx, (&cx.props.watched_data,), |watched_data| async move {
+
+    // });
+
+    let watched_data = cx.props.watched_data.borrow();
+
+    if let Some(WatcherData {
+        updated,
+        twitch,
+        youtube,
+        tiltify,
+    }) = watched_data.as_deref()
+    {
+        cx.render(rsx! {
+            main {
+                pre { "{updated}" }
+                h1 { "Creators for a Cause" }
                 section {
-                    h3 { "Twitch" }
-                    pre { "{cx.props.twitch.updated}" }
-                    div {
-                        class: "creators",
-                        {
-                            cx.props.twitch.creators.iter().map(|creator| {
-                                cx.render(rsx! {
-                                    creator_card { creator: creator, }
+                    h2 { "Fundraiser" }
+                    p { "Together we have raised $TODO:"}
+                }
+                section {
+                    h2 { "Participating Streamers" }
+                    section {
+                        h3 { "Twitch" }
+                        div {
+                            class: "creators",
+                            {
+                                twitch.iter().map(|creator| {
+                                    cx.render(rsx! {
+                                        creator_card { creator: creator, }
+                                    })
                                 })
-                            })
+                            }
+                        }
+                    }
+                    section {
+                        h3 { "Youtube" }
+                        div {
+                            class: "creators",
+                            {
+                                youtube.iter().map(|creator| {
+                                    cx.render(rsx! {
+                                        creator_card { creator: creator, }
+                                    })
+                                })
+                            }
                         }
                     }
                 }
-                section {
-                    h3 { "Youtube" }
-                    pre { "{cx.props.youtube.updated}" }
-                    div {
-                        class: "creators",
-                        {
-                            cx.props.youtube.creators.iter().map(|creator| {
-                                cx.render(rsx! {
-                                    creator_card { creator: creator, }
-                                })
-                            })
-                        }
-                    }
-                }
             }
-        }
-    })
+        })
+    } else {
+        cx.render(rsx! {
+            main { "The backend has not populated the scraping data" }
+        })
+    }
 }

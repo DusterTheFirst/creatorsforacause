@@ -2,10 +2,11 @@ use std::net::SocketAddr;
 
 use askama::Template;
 use axum::{extract::WebSocketUpgrade, routing::get, Router};
+use tokio::sync::watch;
 
-use crate::model::CreatorsWatcher;
+use crate::watcher::WatcherDataReceive;
 
-use super::markup::{DashboardProps, dashboard};
+use super::markup::{dashboard, DashboardProps};
 
 #[derive(Debug, Template)]
 #[template(path = "dashboard.html")]
@@ -13,7 +14,10 @@ struct Dashboard {
     glue: String,
 }
 
-pub(super) fn router(listen: SocketAddr, creators: CreatorsWatcher) -> Router {
+pub(super) fn router(
+    listen: SocketAddr,
+    watcher_data: watch::Receiver<WatcherDataReceive>,
+) -> Router {
     let view = dioxus_liveview::LiveViewPool::new();
 
     Router::new()
@@ -37,19 +41,16 @@ pub(super) fn router(listen: SocketAddr, creators: CreatorsWatcher) -> Router {
         .route(
             "/ws",
             get(move |ws: WebSocketUpgrade| async move {
-                ws.on_upgrade(move |socket| {
-                    let twitch = creators.twitch().borrow().clone();
-                    let youtube = creators.youtube().borrow().clone();
-
-                    async move {
-                        _ = view
-                            .launch_with_props(
-                                dioxus_liveview::axum_socket(socket),
-                                dashboard,
-                                DashboardProps { twitch, youtube },
-                            )
-                            .await;
-                    }
+                ws.on_upgrade(move |socket| async move {
+                    _ = view
+                        .launch_with_props(
+                            dioxus_liveview::axum_socket(socket),
+                            dashboard,
+                            DashboardProps {
+                                watched_data: watcher_data,
+                            },
+                        )
+                        .await;
                 })
             }),
         )

@@ -13,26 +13,25 @@ use opentelemetry::{
 use opentelemetry_otlp::WithExportConfig;
 use sentry::SessionMode;
 use serde::Deserialize;
+use tokio::sync::watch;
 use tonic::{metadata::MetadataMap, transport::ClientTlsConfig};
 use tracing::{trace, Level};
 use tracing_error::ErrorLayer;
 use tracing_subscriber::{
-    filter::Targets, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
-    EnvFilter, Layer, Registry,
+    filter::Targets, prelude::*, util::SubscriberInitExt, EnvFilter, Layer, Registry,
 };
-use twitch::TwitchEnvironment;
-use youtube::YoutubeEnvironment;
+use watcher::WatcherEnvironment;
 
 use crate::{
-    config::CONFIG, model::CreatorsWatcher, twitch::twitch_live_watcher, web::web_server,
-    youtube::youtube_live_watcher,
+    config::CONFIG,
+    watcher::{live_watcher, WatcherDataReceive},
+    web::web_server,
 };
 
 mod config;
 mod model;
-mod twitch;
+mod watcher;
 mod web;
-mod youtube;
 
 #[derive(Deserialize, Debug)]
 struct OpenTelemetryEnvironment {
@@ -51,13 +50,7 @@ struct Environment {
     open_telemetry: Option<OpenTelemetryEnvironment>,
 
     #[serde(flatten)]
-    twitch: TwitchEnvironment,
-
-    #[serde(flatten)]
-    youtube: YoutubeEnvironment,
-
-    /// API key for tiltify
-    tiltify_api_key: String,
+    watcher: WatcherEnvironment,
 }
 
 // Since fly.io is a one core machine, we only need the current thread
@@ -110,28 +103,16 @@ async fn async_main() -> color_eyre::Result<()> {
         .build()
         .expect("failed to setup http client");
 
-    let (creators, twitch_writer, youtube_writer) = CreatorsWatcher::new();
+    let (watcher_sender, watcher_receiver) = watch::channel::<WatcherDataReceive>(None);
 
     tokio::join!(
-        twitch_live_watcher(
+        live_watcher(
             reqwest_client.clone(),
-            environment.twitch,
-            CONFIG.creators.twitch,
-            twitch_writer,
+            environment.watcher,
+            &CONFIG,
+            watcher_sender
         ),
-        youtube_live_watcher(
-            reqwest_client.clone(),
-            environment.youtube,
-            CONFIG.creators.youtube,
-            youtube_writer,
-        ),
-        web_server(
-            environment.listen,
-            reqwest_client,
-            environment.tiltify_api_key,
-            CONFIG.campaign,
-            creators,
-        )
+        web_server(environment.listen, reqwest_client, watcher_receiver,)
     );
 
     Ok(())

@@ -1,58 +1,8 @@
-use std::{cmp, fmt::Debug, sync::Arc};
+use std::{cmp, fmt::Debug};
 
-use serde::Serialize;
+use reqwest::Url;
+use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::sync::watch;
-
-#[derive(Clone)]
-pub struct CreatorsWatcher {
-    twitch: watch::Receiver<CreatorsList>,
-    youtube: watch::Receiver<CreatorsList>,
-}
-
-impl CreatorsWatcher {
-    pub fn new() -> (
-        Self,
-        watch::Sender<CreatorsList>,
-        watch::Sender<CreatorsList>,
-    ) {
-        // We have to use "Sync" channels over Rc<RefCell<_>> since axum requires all state be sync
-        // even though we are guaranteed to be on the same thread (single threaded async runtime)
-        let (youtube_writer, youtube_reader) = watch::channel(CreatorsList {
-            updated: OffsetDateTime::UNIX_EPOCH,
-            creators: Arc::new([]),
-        });
-
-        let (twitch_writer, twitch_reader) = watch::channel(CreatorsList {
-            updated: OffsetDateTime::UNIX_EPOCH,
-            creators: Arc::new([]),
-        });
-
-        (
-            Self {
-                twitch: twitch_reader,
-                youtube: youtube_reader,
-            },
-            twitch_writer,
-            youtube_writer,
-        )
-    }
-
-    pub fn twitch(&self) -> watch::Receiver<CreatorsList> {
-        self.twitch.clone()
-    }
-
-    pub fn youtube(&self) -> watch::Receiver<CreatorsList> {
-        self.youtube.clone()
-    }
-}
-
-#[derive(Debug, Serialize, Clone, PartialEq, Eq)]
-pub struct CreatorsList {
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated: OffsetDateTime,
-    pub creators: Arc<[Creator]>,
-}
 
 #[derive(Debug, Serialize)]
 pub struct Creator {
@@ -95,4 +45,69 @@ pub struct LiveStreamDetails {
     pub title: String,
     pub start_time: OffsetDateTime,
     pub viewers: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename = "camel_case")]
+pub struct Campaign {
+    id: u32,
+    name: String,
+    slug: String,
+    url: String,
+    #[serde(with = "time::serde::timestamp")]
+    starts_at: OffsetDateTime,
+    #[serde(with = "time::serde::timestamp")]
+    ends_at: OffsetDateTime,
+    description: String,
+    avatar: TiltifyAvatar,
+    cause_id: u32,
+
+    fundraising_event_id: u32,
+    fundraiser_goal_amount: u32,
+    original_goal_amount: u32,
+    // Using floats since no math or large numbers are used, so precision is not a problem
+    amount_raised: f64,
+    supporting_amount_raised: f64,
+    total_amount_raised: f64,
+
+    supportable: bool,
+
+    user: TiltifyUser,
+    team: TiltifyTeam,
+}
+
+impl Eq for Campaign {}
+impl PartialEq for Campaign {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename = "camel_case")]
+pub struct TiltifyAvatar {
+    src: Url,
+    alt: String,
+    width: u32,
+    height: u32,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename = "camel_case")]
+pub struct TiltifyUser {
+    id: u32,
+    username: String,
+    slug: String,
+    url: String,
+    avatar: TiltifyAvatar,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename = "camel_case")]
+pub struct TiltifyTeam {
+    id: u32,
+    username: String,
+    slug: String,
+    url: String,
+    avatar: TiltifyAvatar,
 }

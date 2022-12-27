@@ -16,7 +16,7 @@ use twitch_api::{
     types::{Nickname, NicknameRef},
 };
 
-use crate::model::{Creator, CreatorsList, LiveStreamDetails};
+use crate::model::{Creator, LiveStreamDetails};
 
 #[derive(Deserialize, Debug)]
 pub struct TwitchEnvironment {

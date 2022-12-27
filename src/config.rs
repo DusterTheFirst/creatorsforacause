@@ -1,6 +1,6 @@
 use twitch_api::types::NicknameRef;
 
-use crate::youtube::api::YoutubeHandleRef;
+use crate::watcher::youtube::api::YoutubeHandleRef;
 
 #[derive(Debug)]
 pub struct CreatorNames {
@@ -9,18 +9,18 @@ pub struct CreatorNames {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Campaign {
-    pub id: u64,
+pub struct CampaignConfig {
+    pub id: u32,
 }
 
 #[derive(Debug)]
 pub struct Config {
-    pub campaign: Campaign,
+    pub campaign: CampaignConfig,
     pub creators: CreatorNames,
 }
 
 pub static CONFIG: Config = Config {
-    campaign: Campaign { id: 468510 },
+    campaign: CampaignConfig { id: 468510 },
 
     // TODO: FIXME: User IDs?
     creators: CreatorNames {

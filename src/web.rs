@@ -3,33 +3,27 @@ use std::{net::SocketAddr, time::Duration};
 use axum::{body::Bytes, extract::State, routing::get, Json, Router, Server};
 use hyper::StatusCode;
 use sentry_tower::{SentryHttpLayer, SentryLayer};
-use serde_json::{json, Value};
+use tokio::sync::watch;
 use tower_http::{
     catch_panic::CatchPanicLayer, cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer,
 };
 use tracing::{error, info};
 
-use crate::{config::Campaign, CreatorsWatcher};
+use crate::{config::CampaignConfig, watcher::WatcherDataReceive};
 
 mod live_view;
 mod markup;
 
-#[tracing::instrument(skip(creators, http_client, tiltify_api_key))]
+#[tracing::instrument(skip(watcher_data, http_client))]
 pub async fn web_server(
     listen: SocketAddr,
     http_client: reqwest::Client,
-    tiltify_api_key: String,
-    campaign: Campaign,
-    creators: CreatorsWatcher,
+    watcher_data: watch::Receiver<WatcherDataReceive>,
 ) {
     let app = Router::new()
-        .nest("/", live_view::router(listen, creators.clone()))
+        .nest("/", live_view::router(listen, watcher_data.clone()))
         .route("/healthy", get(|| async { "OK" }))
-        .route_service("/streams", get(streams).with_state(creators))
-        .route_service(
-            "/fundraiser",
-            get(fundraiser).with_state((tiltify_api_key, campaign, http_client)),
-        )
+        .route_service("/json", get(json).with_state(watcher_data))
         .layer(
             tower::ServiceBuilder::new()
                 .layer(SentryLayer::new_from_top())
@@ -51,7 +45,11 @@ pub async fn web_server(
 #[axum::debug_handler]
 #[tracing::instrument(skip_all)]
 async fn fundraiser(
-    State((tiltify_api_key, campaign, http_client)): State<(String, Campaign, reqwest::Client)>,
+    State((tiltify_api_key, campaign, http_client)): State<(
+        String,
+        CampaignConfig,
+        reqwest::Client,
+    )>,
 ) -> Result<Bytes, StatusCode> {
     let request = http_client
         .get(format!(
@@ -76,9 +74,8 @@ async fn fundraiser(
 
 #[axum::debug_handler]
 #[allow(clippy::type_complexity)]
-async fn streams(State(creators): State<CreatorsWatcher>) -> Json<Value> {
-    Json(json!({
-        "youtube": &*creators.youtube().borrow(),
-        "twitch": &*creators.twitch().borrow(),
-    }))
+async fn json(
+    State(watcher_data): State<watch::Receiver<WatcherDataReceive>>,
+) -> Json<WatcherDataReceive> {
+    Json(watcher_data.borrow().as_ref().cloned())
 }
