@@ -102,6 +102,7 @@ pub async fn get_creator_info(
     })
 }
 
+#[derive(Debug)]
 pub struct VideoInfo {
     pub live_streaming_details: VideoLiveStreamingDetails,
     pub snippet: VideoSnippet,

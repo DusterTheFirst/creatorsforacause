@@ -94,5 +94,5 @@ pub struct LiveStreamDetails {
     pub href: String,
     pub title: String,
     pub start_time: OffsetDateTime,
-    pub viewers: u32,
+    pub viewers: Option<u32>,
 }

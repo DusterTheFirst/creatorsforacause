@@ -128,8 +128,14 @@ mod live_view {
                             div {
                                 h5 { "Stream" }
                                 p { "Title: " a { href: "{stream.href}", "{stream.title}" } }
-                                p {"Start Time: {stream.start_time}"}
-                                p {"Viewers: {stream.viewers}"}
+                                p { "Start Time: {stream.start_time}" }
+                                p { "Viewers: "
+                                    if let Some(viewers) = stream.viewers {
+                                        rsx! { "{viewers}" }
+                                    } else {
+                                        rsx! { "Hidden By Creator" }
+                                    }
+                                }
                             }
                         }
                     })

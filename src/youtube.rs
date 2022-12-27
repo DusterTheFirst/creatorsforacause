@@ -174,12 +174,15 @@ async fn get_livestream_details(
             .live_streaming_details
             .actual_start_time
             .expect("actual_start_time field should be present in liveStreamingDetails");
-        let concurrent_viewers = video_info
-            .live_streaming_details
-            .concurrent_viewers
-            .expect("concurrent_viewers field should be present in liveStreamingDetails")
-            .parse()
-            .expect("concurrent_viewers should be a valid integer");
+        let concurrent_viewers =
+            video_info
+                .live_streaming_details
+                .concurrent_viewers
+                .map(|viewers| {
+                    viewers
+                        .parse()
+                        .expect("concurrent_viewers should be a valid integer")
+                });
         let title = video_info
             .snippet
             .title

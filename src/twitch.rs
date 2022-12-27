@@ -168,10 +168,12 @@ async fn get_live_statuses(
                 title: stream.title,
                 start_time: OffsetDateTime::parse(stream.started_at.as_str(), &well_known::Rfc3339)
                     .expect("stream start time should be a well formed rfc3339 date-time"),
-                viewers: stream
-                    .viewer_count
-                    .try_into()
-                    .expect("viewer_count should be no larger than a 32 bit integer"),
+                viewers: Some(
+                    stream
+                        .viewer_count
+                        .try_into()
+                        .expect("viewer_count should be no larger than a 32 bit integer"),
+                ),
             };
 
             (stream.user_login, livestream_details)
