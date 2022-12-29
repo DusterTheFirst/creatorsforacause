@@ -73,13 +73,28 @@ pub struct DashboardProps {
 
 #[tracing::instrument(skip_all)]
 pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
-    let funds = 0;
+    let watched_data = use_state(cx, || None);
 
-    // use_future(cx, (&cx.props.watched_data,), |watched_data| async move {
+    use_coroutine(cx, {
+        let schedule_update = cx.schedule_update_any();
+        let scope_id = cx.scope_id();
+        let mut watched_data_rx = cx.props.watched_data.clone();
+        let watched_data = watched_data.clone();
 
-    // });
+        move |_: UnboundedReceiver<()>| async move {
+            loop {
+                *watched_data.make_mut() = watched_data_rx.borrow().as_ref().cloned();
 
-    let watched_data = cx.props.watched_data.borrow();
+                match watched_data_rx.changed().await {
+                    Ok(()) => {}
+                    // Channel closed
+                    Err(_err) => break,
+                };
+
+                schedule_update(scope_id);
+            }
+        }
+    });
 
     if let Some(WatcherData {
         updated,
@@ -88,7 +103,7 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
         tiltify,
     }) = watched_data.as_deref()
     {
-        cx.render(rsx! {
+        let rsx = rsx! {
             main {
                 pre { "{updated}" }
                 h1 { "Creators for a Cause" }
@@ -102,31 +117,29 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                         h3 { "Twitch" }
                         div {
                             class: "creators",
-                            {
-                                twitch.iter().map(|creator| {
-                                    cx.render(rsx! {
-                                        creator_card { creator: creator, }
-                                    })
+                            {twitch.iter().map(|creator| {
+                                cx.render(rsx! {
+                                    creator_card { creator: creator, }
                                 })
-                            }
+                            })}
                         }
                     }
                     section {
                         h3 { "Youtube" }
                         div {
                             class: "creators",
-                            {
-                                youtube.iter().map(|creator| {
-                                    cx.render(rsx! {
-                                        creator_card { creator: creator, }
-                                    })
+                            {youtube.iter().map(|creator| {
+                                cx.render(rsx! {
+                                    creator_card { creator: creator, }
                                 })
-                            }
+                            })}
                         }
                     }
                 }
             }
-        })
+        };
+
+        cx.render(rsx)
     } else {
         cx.render(rsx! {
             main { "The backend has not populated the scraping data" }

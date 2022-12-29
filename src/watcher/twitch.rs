@@ -26,64 +26,90 @@ pub struct TwitchEnvironment {
     client_secret: ClientSecret,
 }
 
-pub async fn twitch_live_watcher(
-    http_client: reqwest::Client,
-    environment: TwitchEnvironment,
-    creators_names: &[&NicknameRef],
-    status_sender: watch::Sender<CreatorsList>,
-) {
-    info!(
-        ?creators_names,
-        "Starting live status watch of twitch creators"
-    );
+pub struct TwitchLiveWatcher {
+    helix_client: twitch_api::HelixClient<'static, reqwest::Client>,
+    token: AppAccessToken,
+    creators_names: &'static [&'static NicknameRef],
+}
 
-    let client = twitch_api::HelixClient::with_client(http_client);
-    let mut token = AppAccessToken::get_app_access_token(
-        &client,
-        environment.client_id,
-        environment.client_secret,
-        vec![],
-    )
-    .await
-    .expect("access token should be fetched successfully");
+impl TwitchLiveWatcher {
+    #[tracing::instrument(skip_all)]
+    pub async fn setup(
+        http_client: reqwest::Client,
+        environment: TwitchEnvironment,
+        creators_names: &'static [&'static NicknameRef],
+    ) -> Self {
+        let helix_client = twitch_api::HelixClient::with_client(http_client);
 
-    info!(expires_in = ?token.expires_in(), "acquired access token");
+        let token = AppAccessToken::get_app_access_token(
+            &helix_client,
+            environment.client_id,
+            environment.client_secret,
+            vec![],
+        )
+        .await
+        .expect("access token should be fetched successfully");
 
-    let mut next_refresh = Instant::now();
-    let refresh_interval = Duration::from_secs(10 * 60); // 10 minutes
+        info!(expires_in = ?token.expires_in(), "acquired access token");
 
-    loop {
-        tokio::time::sleep_until(next_refresh).await;
-
-        if token.is_elapsed() {
-            match token.refresh_token(&client).await {
-                Ok(()) => trace!(expires_in = ?token.expires_in(), "refreshed access token"),
-                Err(error) => {
-                    error!(%error, "failed to refresh twitch access token");
-                }
-            };
+        TwitchLiveWatcher {
+            helix_client,
+            token,
+            creators_names,
         }
+    }
 
-        if let Some(creators) = get_creators(&client, creators_names, &token).await {
-            status_sender.send_replace(CreatorsList {
-                updated: OffsetDateTime::now_utc(),
-                creators: Arc::from(creators),
-            });
-        } else {
-            warn!("no update to the live streams");
-        }
-
-        // Refresh every 10 minutes
-        next_refresh += refresh_interval;
-        trace!(?refresh_interval, "Waiting for next refresh");
+    pub async fn get_creators(&mut self) -> Option<Box<[Creator]>> {
+        get_creators(&self.helix_client, self.creators_names, &mut self.token).await
     }
 }
+
+// pub async fn twitch_live_watcher(
+//     http_client: reqwest::Client,
+//     environment: TwitchEnvironment,
+//     creators_names: &[&NicknameRef],
+//     status_sender: watch::Sender<CreatorsList>,
+// ) {
+//     info!(
+//         ?creators_names,
+//         "Starting live status watch of twitch creators"
+//     );
+
+//     let mut next_refresh = Instant::now();
+//     let refresh_interval = Duration::from_secs(10 * 60); // 10 minutes
+
+//     loop {
+//         tokio::time::sleep_until(next_refresh).await;
+
+//         if let Some(creators) = get_creators(&twitch_client, creators_names, &token).await {
+//             status_sender.send_replace(CreatorsList {
+//                 updated: OffsetDateTime::now_utc(),
+//                 creators: Arc::from(creators),
+//             });
+//         } else {
+//             warn!("no update to the live streams");
+//         }
+
+//         // Refresh every 10 minutes
+//         next_refresh += refresh_interval;
+//         trace!(?refresh_interval, "Waiting for next refresh");
+//     }
+// }
 
 async fn get_creators(
     client: &twitch_api::HelixClient<'static, reqwest::Client>,
     creators_names: &[&NicknameRef],
-    token: &AppAccessToken,
+    token: &mut AppAccessToken,
 ) -> Option<Box<[Creator]>> {
+    if token.is_elapsed() {
+        match token.refresh_token(client).await {
+            Ok(()) => trace!(expires_in = ?token.expires_in(), "refreshed access token"),
+            Err(error) => {
+                error!(%error, "failed to refresh twitch access token");
+            }
+        };
+    }
+
     let (users, streams) = tokio::join!(
         get_user_info(client, creators_names, token),
         get_live_statuses(client, creators_names, token)

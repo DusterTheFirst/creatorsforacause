@@ -1,16 +1,12 @@
-use std::{fmt::Debug, rc::Rc, sync::Arc};
+use std::fmt::Debug;
 
 use futures::stream::{FuturesUnordered, StreamExt};
 use serde::Deserialize;
 use time::{format_description::well_known, OffsetDateTime};
-use tokio::{
-    pin,
-    sync::watch,
-    time::{Duration, Instant},
-};
-use tracing::{debug, error, info, trace, warn, Instrument};
+use tokio::pin;
+use tracing::{debug, error, info, warn, Instrument};
 
-use crate::model::{Creator, CreatorsList, LiveStreamDetails};
+use crate::model::{Creator, LiveStreamDetails};
 
 use self::{
     api::{get_creator_info, get_video_info, ApiKey, ApiKeyRef, CreatorInfo, YoutubeHandleRef},
@@ -26,55 +22,29 @@ pub struct YoutubeEnvironment {
     api_key: ApiKey,
 }
 
-pub async fn youtube_live_watcher(
-    http_client: reqwest::Client,
-    environment: YoutubeEnvironment,
-    creators: &[&YoutubeHandleRef],
-    status_sender: watch::Sender<CreatorsList>,
-) {
-    let api_key = Rc::new(environment.api_key);
-
-    let mut next_refresh = Instant::now();
-    let refresh_interval = Duration::from_secs(60 * 10);
-
-    loop {
-        let creators = get_creators(creators, &http_client, &api_key).await;
-
-        // Send status to web server
-        status_sender.send_replace(CreatorsList {
-            updated: OffsetDateTime::now_utc(),
-            creators: Arc::from(creators),
-        });
-
-        // Refresh every 10 minutes
-        next_refresh += refresh_interval;
-        trace!(?refresh_interval, "Waiting for next refresh");
-
-        tokio::time::sleep_until(next_refresh).await;
-    }
-}
-
 #[tracing::instrument(skip_all)]
-async fn get_creators(
+pub async fn get_creators(
     creator_names: &[&YoutubeHandleRef],
     http_client: &reqwest::Client,
-    api_key: &ApiKeyRef,
+    environment: &YoutubeEnvironment,
 ) -> Box<[Creator]> {
-    let futures = FuturesUnordered::new();
+    pin! {
+        let futures = FuturesUnordered::new();
+    };
+
     for creator_name in creator_names.iter() {
         let span = tracing::trace_span!("creator_update", ?creator_name);
 
         futures.push(
             async move {
                 tokio::join!(
-                    get_creator_info_from_handle(http_client, api_key, creator_name),
-                    get_livestream_details(http_client, api_key, creator_name)
+                    get_creator_info_from_handle(http_client, &environment.api_key, creator_name),
+                    get_livestream_details(http_client, &environment.api_key, creator_name)
                 )
             }
             .instrument(span),
         );
     }
-    pin!(futures);
 
     // Drive all futures to completion, collecting their results
     let mut live_broadcasts: Vec<Creator> = Vec::with_capacity(creator_names.len());
