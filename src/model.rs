@@ -4,8 +4,11 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
+mod javascript_unix_timestamp;
+
 #[derive(Debug, Serialize)]
 pub struct Creator {
+    pub id: String,
     pub display_name: String,
     pub href: String,
     pub icon_url: String,
@@ -21,11 +24,6 @@ impl PartialEq for Creator {
 
 impl Ord for Creator {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        // dbg!(
-        //     (&self.display_name, &other.display_name),
-        //     (self.stream.is_some(), other.stream.is_some())
-        // );
-
         match (self.stream.is_some(), other.stream.is_some()) {
             (true, false) => cmp::Ordering::Less,
             (false, true) => cmp::Ordering::Greater,
@@ -43,29 +41,30 @@ impl PartialOrd for Creator {
 pub struct LiveStreamDetails {
     pub href: String,
     pub title: String,
+    #[serde(with = "time::serde::rfc3339")]
     pub start_time: OffsetDateTime,
     pub viewers: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-#[serde(rename = "camel_case")]
+#[serde(rename_all(deserialize = "camelCase"))]
 pub struct Campaign {
     id: u32,
     name: String,
     slug: String,
-    url: String,
-    #[serde(with = "time::serde::timestamp")]
+    #[serde(deserialize_with = "javascript_unix_timestamp::deserialize")]
+    #[serde(serialize_with = "time::serde::rfc3339::serialize")]
     starts_at: OffsetDateTime,
-    #[serde(with = "time::serde::timestamp")]
-    ends_at: OffsetDateTime,
+    #[serde(deserialize_with = "javascript_unix_timestamp::option::deserialize")]
+    #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
+    ends_at: Option<OffsetDateTime>,
     description: String,
     avatar: TiltifyAvatar,
     cause_id: u32,
 
-    fundraising_event_id: u32,
-    fundraiser_goal_amount: u32,
-    original_goal_amount: u32,
     // Using floats since no math or large numbers are used, so precision is not a problem
+    fundraiser_goal_amount: f64,
+    original_fundraiser_goal: f64,
     amount_raised: f64,
     supporting_amount_raised: f64,
     total_amount_raised: f64,
@@ -106,7 +105,7 @@ pub struct TiltifyUser {
 #[serde(rename = "camel_case")]
 pub struct TiltifyTeam {
     id: u32,
-    username: String,
+    name: String,
     slug: String,
     url: String,
     avatar: TiltifyAvatar,

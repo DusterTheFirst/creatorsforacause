@@ -110,6 +110,7 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                 section {
                     h2 { "Fundraiser" }
                     p { "Together we have raised $TODO:"}
+                    pre { serde_json::to_string(tiltify).expect("tiltify should be serializable") }
                 }
                 section {
                     h2 { "Participating Streamers" }
@@ -117,22 +118,22 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                         h3 { "Twitch" }
                         div {
                             class: "creators",
-                            {twitch.iter().map(|creator| {
+                            twitch.iter().map(|creator| {
                                 cx.render(rsx! {
-                                    creator_card { creator: creator, }
+                                    creator_card { key: "{creator.id}", creator: creator, }
                                 })
-                            })}
+                            })
                         }
                     }
                     section {
                         h3 { "Youtube" }
                         div {
                             class: "creators",
-                            {youtube.iter().map(|creator| {
+                            youtube.iter().map(|creator| {
                                 cx.render(rsx! {
-                                    creator_card { creator: creator, }
+                                    creator_card { key: "{creator.id}", creator: creator, }
                                 })
-                            })}
+                            })
                         }
                     }
                 }
@@ -142,7 +143,7 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
         cx.render(rsx)
     } else {
         cx.render(rsx! {
-            main { "The backend has not populated the scraping data" }
+            main { "Please wait... the backend has not populated the scraping data" }
         })
     }
 }

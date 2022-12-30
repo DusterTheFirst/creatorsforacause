@@ -15,6 +15,7 @@ use self::{
     youtube::YoutubeEnvironment,
 };
 
+pub mod tiltify;
 pub mod twitch;
 pub mod youtube;
 
@@ -58,20 +59,20 @@ pub async fn live_watcher(
     let refresh_interval = Duration::from_secs(10 * 60); // 10 minutes
 
     loop {
-        let youtube_creators =
-            youtube::get_creators(config.creators.youtube, &http_client, &environment.youtube)
-                .await;
+        let (youtube, twitch, tiltify) = tokio::join!(
+            youtube::get_creators(&http_client, config.creators.youtube, &environment.youtube),
+            twitch_live_watcher.get_creators(),
+            tiltify::get_campaign(&http_client, config.campaign, &environment.tiltify_api_key),
+        );
 
-        let twitch_creators = twitch_live_watcher
-            .get_creators()
-            .await
-            .expect("TODO: REPLACE WITH ERROR HANDLING");
+        let twitch = twitch.expect("TODO: REPLACE WITH ERROR HANDLING");
+        let tiltify = tiltify.expect("TODO: REPLACE WITH ERROR HANDLING");
 
         sender.send_replace(Some(Arc::new(WatcherData {
             updated: OffsetDateTime::now_utc(),
-            twitch: twitch_creators,
-            youtube: youtube_creators,
-            tiltify: todo!(),
+            twitch,
+            youtube,
+            tiltify,
         })));
 
         // Refresh every 10 minutes

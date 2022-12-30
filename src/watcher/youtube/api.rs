@@ -35,6 +35,7 @@ pub enum WebError {
 
 pub struct CreatorInfo {
     pub snippet: ChannelSnippet,
+    pub id: ChannelId,
 }
 
 #[tracing::instrument(skip(http_client, api_key))]
@@ -96,6 +97,7 @@ pub async fn get_creator_info(
 
     // Extract important information from the response
     Ok(CreatorInfo {
+        id: channel_id,
         snippet: channel
             .snippet
             .expect("snippet part should exist in response"),

@@ -24,8 +24,8 @@ pub struct YoutubeEnvironment {
 
 #[tracing::instrument(skip_all)]
 pub async fn get_creators(
-    creator_names: &[&YoutubeHandleRef],
     http_client: &reqwest::Client,
+    creator_names: &[&YoutubeHandleRef],
     environment: &YoutubeEnvironment,
 ) -> Box<[Creator]> {
     pin! {
@@ -70,6 +70,7 @@ pub async fn get_creators(
                     .expect("custom_url field should be present in snippet");
 
                 live_broadcasts.push(Creator {
+                    id: creator_info.id.take(),
                     display_name,
                     href: format!("https://youtube.com/{custom_url}"),
                     icon_url,

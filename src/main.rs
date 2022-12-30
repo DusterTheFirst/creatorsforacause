@@ -106,13 +106,8 @@ async fn async_main() -> color_eyre::Result<()> {
     let (watcher_sender, watcher_receiver) = watch::channel::<WatcherDataReceive>(None);
 
     tokio::join!(
-        live_watcher(
-            reqwest_client.clone(),
-            environment.watcher,
-            &CONFIG,
-            watcher_sender
-        ),
-        web_server(environment.listen, reqwest_client, watcher_receiver,)
+        live_watcher(reqwest_client, environment.watcher, &CONFIG, watcher_sender),
+        web_server(environment.listen, watcher_receiver,)
     );
 
     Ok(())

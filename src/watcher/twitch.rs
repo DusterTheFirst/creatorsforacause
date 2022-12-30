@@ -1,12 +1,8 @@
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 use serde::Deserialize;
 use time::{format_description::well_known, OffsetDateTime};
-use tokio::{
-    sync::watch,
-    time::{Duration, Instant},
-};
-use tracing::{error, info, trace, warn};
+use tracing::{error, info, trace};
 use twitch_api::{
     helix::{
         streams::GetStreamsRequest,
@@ -64,38 +60,6 @@ impl TwitchLiveWatcher {
     }
 }
 
-// pub async fn twitch_live_watcher(
-//     http_client: reqwest::Client,
-//     environment: TwitchEnvironment,
-//     creators_names: &[&NicknameRef],
-//     status_sender: watch::Sender<CreatorsList>,
-// ) {
-//     info!(
-//         ?creators_names,
-//         "Starting live status watch of twitch creators"
-//     );
-
-//     let mut next_refresh = Instant::now();
-//     let refresh_interval = Duration::from_secs(10 * 60); // 10 minutes
-
-//     loop {
-//         tokio::time::sleep_until(next_refresh).await;
-
-//         if let Some(creators) = get_creators(&twitch_client, creators_names, &token).await {
-//             status_sender.send_replace(CreatorsList {
-//                 updated: OffsetDateTime::now_utc(),
-//                 creators: Arc::from(creators),
-//             });
-//         } else {
-//             warn!("no update to the live streams");
-//         }
-
-//         // Refresh every 10 minutes
-//         next_refresh += refresh_interval;
-//         trace!(?refresh_interval, "Waiting for next refresh");
-//     }
-// }
-
 async fn get_creators(
     client: &twitch_api::HelixClient<'static, reqwest::Client>,
     creators_names: &[&NicknameRef],
@@ -121,6 +85,7 @@ async fn get_creators(
         .into_iter()
         .map(|user| {
             Creator {
+                id: user.id.take(),
                 display_name: user.display_name.take(),
                 href: format!("https://twitch.tv/{}", user.login),
                 icon_url: user
