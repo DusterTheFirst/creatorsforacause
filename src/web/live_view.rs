@@ -33,7 +33,6 @@ pub(super) fn router(
                 let domain = "wss://creatorsforacause.fly.dev/ws";
 
                 Dashboard {
-                    // FIXME: wss on https, and use correct domain.
                     glue: dioxus_liveview::interpreter_glue(domain),
                 }
             }),

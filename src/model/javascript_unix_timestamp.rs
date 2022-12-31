@@ -1,15 +1,15 @@
 use serde::{Deserialize, Deserializer, Serializer};
 use time::OffsetDateTime;
 
-fn js_timestamp_to_date_time(timestamp: i64) -> OffsetDateTime {
+pub fn js_timestamp_to_date_time(timestamp: i64) -> OffsetDateTime {
     let timestamp = i128::from(timestamp);
 
-    OffsetDateTime::from_unix_timestamp_nanos(timestamp * 1000)
+    OffsetDateTime::from_unix_timestamp_nanos(timestamp * 1_000_000)
         .expect("provided value should be a valid unix timestamp in milliseconds")
 }
 
-fn date_time_to_js_timestamp(date_time: &OffsetDateTime) -> i64 {
-    let timestamp_millis = date_time.unix_timestamp_nanos() / 1000;
+pub fn date_time_to_js_timestamp(date_time: &OffsetDateTime) -> i64 {
+    let timestamp_millis = date_time.unix_timestamp_nanos() / 1_000_000;
 
     i64::try_from(timestamp_millis)
         .expect("unix timestamp in milliseconds should not overflow an i64")

@@ -38,6 +38,7 @@ pub async fn get_creators(
         futures.push(
             async move {
                 tokio::join!(
+                    // Cache this and or the user ID
                     get_creator_info_from_handle(http_client, &environment.api_key, creator_name),
                     get_livestream_details(http_client, &environment.api_key, creator_name)
                 )

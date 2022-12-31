@@ -2,7 +2,7 @@ use dioxus::prelude::*;
 use tokio::sync::watch;
 
 use crate::{
-    model::Creator,
+    model::{Creator, javascript_unix_timestamp},
     watcher::{WatcherData, WatcherDataReceive},
 };
 
@@ -103,9 +103,16 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
         tiltify,
     }) = watched_data.as_deref()
     {
-        let rsx = rsx! {
+        let js_timestamp = javascript_unix_timestamp::date_time_to_js_timestamp(updated);
+
+        cx.render(rsx! {
             main {
                 pre { "{updated}" }
+                p {
+                    script {
+                        "document.currentScript.parentElement.appendChild(document.createTextNode(new Date({js_timestamp}).toLocaleString()));"
+                    }
+                }
                 h1 { "Creators for a Cause" }
                 section {
                     h2 { "Fundraiser" }
@@ -138,9 +145,7 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                     }
                 }
             }
-        };
-
-        cx.render(rsx)
+        })
     } else {
         cx.render(rsx! {
             main { "Please wait... the backend has not populated the scraping data" }

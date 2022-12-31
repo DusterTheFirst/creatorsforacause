@@ -4,7 +4,7 @@ use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 
-mod javascript_unix_timestamp;
+pub mod javascript_unix_timestamp;
 
 #[derive(Debug, Serialize)]
 pub struct Creator {
