@@ -46,7 +46,9 @@ impl TwitchLiveWatcher {
         .await
         .expect("access token should be fetched successfully");
 
-        info!(expires_in = ?token.expires_in(), "acquired access token");
+        let expires_at = OffsetDateTime::now_utc() + token.expires_in();
+
+        info!(?expires_at, "acquired access token");
 
         TwitchLiveWatcher {
             helix_client,

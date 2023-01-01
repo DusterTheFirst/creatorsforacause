@@ -1,36 +1,151 @@
+:root {
+    --creator-card-width: 15em;
+    --creator-card-image-width: 10em;
+
+    --text-color: #ffffff;
+    --background-color: #222222;
+    --card-color: #444444;
+
+    --card-margin: 2em 1em;
+    --card-padding: 2em 1em;
+}
+
 html,
 body {
-    margin: 0;
-    background-color: #222222;
-    color: #ffffff;
+    margin: 0.5em;
+    background-color: var(--background-color);
+    color: var(--text-color);
     touch-action: manipulation;
 }
 
-.creators {
+a {
+    color: var(--text-color);
+}
+
+/* Sticky Headers */
+h1 {
+    background-color: var(--background-color);
+    position: sticky;
+    z-index: 1;
+    display: block;
+    font-size: 2em;
+    font-weight: bold;
+    margin-block-start: 0.67em;
+    margin-block-end: 0.67em;
+    top: 0em;
+}
+
+h2 {
+    background-color: var(--background-color);
+    position: sticky;
+    z-index: 2;
+    display: block;
+    font-size: 1.5em;
+    font-weight: bold;
+    margin-block-start: 0.83em;
+    margin-block-end: 0.83em;
+    top: calc(2em + 0.67em);
+}
+
+h3 {
+    background-color: var(--background-color);
+    position: sticky;
+    z-index: 3;
+    display: block;
+    font-size: 1.17em;
+    font-weight: bold;
+    margin-block-start: 1em;
+    margin-block-end: 1em;
+    top: calc(2em + 0.67em + 1.5em + 0.83em);
+}
+
+h4 {
+    background-color: var(--background-color);
+    position: sticky;
+    z-index: 4;
+    display: block;
+    font-size: 1em;
+    font-weight: bold;
+    margin-block-start: 1.33em;
+    margin-block-end: 1.33em;
+    top: calc(2em + 0.67em + 1.5em + 0.83em + 1.17em + 1em);
+}
+
+h5 {
+    background-color: var(--background-color);
+    position: sticky;
+    z-index: 5;
+    display: block;
+    font-size: 0.83em;
+    font-weight: bold;
+    margin-block-start: 1.67em;
+    margin-block-end: 1.67em;
+    top: calc(2em + 0.67em + 1.5em + 0.83em + 1.17em + 1em + 1em + 1.33em);
+}
+
+h6 {
+    background-color: var(--background-color);
+    position: sticky;
+    z-index: 6;
+    display: block;
+    font-size: 0.67em;
+    font-weight: bold;
+    margin-block-start: 2.33em;
+    margin-block-end: 2.33em;
+    top: calc(
+        2em + 0.67em + 1.5em + 0.83em + 1.17em + 1em + 1em + 1.33em + 0.83em +
+            1.67em
+    );
+}
+
+.platforms {
     display: flex;
     flex-wrap: wrap;
+    flex-direction: row;
+}
+
+.platforms .platform {
+    text-align: center;
+
+    flex-grow: 1;
+    flex-shrink: 0;
+    flex-basis: var(--creator-card-width);
+
+    border-color: #ffffff;
+    border-style: solid;
+    border-width: 0.2em;
+    border-radius: 10px;
+}
+
+.platform .creators {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-evenly;
+    text-align: start;
 }
 
 .creator {
-    width: 20em;
+    width: var(--creator-card-width);
+    margin: var(--card-margin);
+    padding: var(--card-padding);
+    background-color: var(--card-color);
 
-    border: white solid 2px;
+    border-color: #ffffff;
+    border-style: solid;
+    border-width: 0.2em;
+    border-radius: 10px;
 }
 
 .creator.live {
-    border: #ff0000 solid 2px;
+    border-color: #ff0000;
 }
 
 .creator img {
-    width: 50px;
-}
-
-.creator .display_name a {
-    color: white;
+    width: var(--creator-card-image-width);
+    border-radius: 50%;
 }
 
 .creator .stream a {
-    color: white;
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;

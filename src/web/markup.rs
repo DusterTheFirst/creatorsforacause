@@ -2,69 +2,15 @@ use dioxus::prelude::*;
 use tokio::sync::watch;
 
 use crate::{
-    model::{Creator, javascript_unix_timestamp},
     watcher::{WatcherData, WatcherDataReceive},
+    web::markup::date::DATE_RENDERER,
 };
 
-#[derive(Debug, Props)]
-pub struct CreatorCardProps<'c> {
-    pub creator: &'c Creator,
-}
+use self::creator_card::creator_card;
+use self::date::locale_date;
 
-pub fn creator_card<'s>(cx: Scope<'s, CreatorCardProps<'s>>) -> Element<'s> {
-    let creator = cx.props.creator;
-
-    let class = if creator.stream.is_some() {
-        "creator live"
-    } else {
-        "creator"
-    };
-
-    cx.render(rsx! {
-        div {
-            class: class,
-            img {
-                src: "{creator.icon_url}",
-                alt: "Profile Picture",
-                // loading: "lazy",
-            }
-            h4 {
-                class: "display_name",
-                a {
-                    href: "{creator.href}",
-                    "{creator.display_name}"
-                }
-            }
-            {
-                creator.stream.as_ref().map(|stream| {
-                    rsx! {
-                        div {
-                            class: "stream",
-                            h5 { "Stream" }
-                            p {
-                                "Title: "
-                                a {
-                                    href: "{stream.href}",
-                                    target: "_blank",
-                                    "{stream.title}"
-                                }
-                            }
-                            p { "Start Time: {stream.start_time}" }
-                            p {
-                                "Viewers: "
-                                if let Some(viewers) = stream.viewers {
-                                    rsx! { "{viewers}" }
-                                } else {
-                                    rsx! { "Hidden By Creator" }
-                                }
-                            }
-                        }
-                    }
-                })
-            }
-        }
-    })
-}
+mod creator_card;
+mod date;
 
 #[derive(Debug)]
 pub struct DashboardProps {
@@ -73,7 +19,7 @@ pub struct DashboardProps {
 
 #[tracing::instrument(skip_all)]
 pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
-    let watched_data = use_state(cx, || None);
+    let watched_data = use_state(cx, || cx.props.watched_data.borrow().as_ref().cloned());
 
     use_coroutine(cx, {
         let schedule_update = cx.schedule_update_any();
@@ -103,16 +49,18 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
         tiltify,
     }) = watched_data.as_deref()
     {
-        let js_timestamp = javascript_unix_timestamp::date_time_to_js_timestamp(updated);
-
         cx.render(rsx! {
             main {
-                pre { "{updated}" }
+                script { DATE_RENDERER }
                 p {
-                    script {
-                        "document.currentScript.parentElement.appendChild(document.createTextNode(new Date({js_timestamp}).toLocaleString()));"
-                    }
+                    "Updated: "
+                    locale_date { date: updated }
                 }
+                // p {
+                //     script {
+                //         "document.currentScript.parentElement.appendChild(document.createTextNode(new Date({js_timestamp}).toLocaleString()));"
+                //     }
+                // }
                 h1 { "Creators for a Cause" }
                 section {
                     h2 { "Fundraiser" }
@@ -121,26 +69,31 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                 }
                 section {
                     h2 { "Participating Streamers" }
-                    section {
-                        h3 { "Twitch" }
-                        div {
-                            class: "creators",
-                            twitch.iter().map(|creator| {
-                                cx.render(rsx! {
-                                    creator_card { key: "{creator.id}", creator: creator, }
+                    div {
+                        class: "platforms",
+                        section {
+                            class: "platform",
+                            h3 { "Twitch" }
+                            div {
+                                class: "creators",
+                                twitch.iter().map(|creator| {
+                                    cx.render(rsx! {
+                                        creator_card { key: "{creator.id}", creator: creator, }
+                                    })
                                 })
-                            })
+                            }
                         }
-                    }
-                    section {
-                        h3 { "Youtube" }
-                        div {
-                            class: "creators",
-                            youtube.iter().map(|creator| {
-                                cx.render(rsx! {
-                                    creator_card { key: "{creator.id}", creator: creator, }
+                        section {
+                            class: "platform",
+                            h3 { "Youtube" }
+                            div {
+                                class: "creators",
+                                youtube.iter().map(|creator| {
+                                    cx.render(rsx! {
+                                        creator_card { key: "{creator.id}", creator: creator, }
+                                    })
                                 })
-                            })
+                            }
                         }
                     }
                 }

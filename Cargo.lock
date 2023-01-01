@@ -526,7 +526,7 @@ dependencies = [
 [[package]]
 name = "dioxus"
 version = "0.2.4"
-source = "git+https://github.com/DioxusLabs/dioxus#6924dddb92826a79cc80ad04ad43e0155f11d62d"
+source = "git+https://github.com/DioxusLabs/dioxus#c8f88b6428e858b4ebe746e7b614649247691601"
 dependencies = [
  "dioxus-core",
  "dioxus-core-macro",
@@ -538,7 +538,7 @@ dependencies = [
 [[package]]
 name = "dioxus-core"
 version = "0.2.1"
-source = "git+https://github.com/DioxusLabs/dioxus#6924dddb92826a79cc80ad04ad43e0155f11d62d"
+source = "git+https://github.com/DioxusLabs/dioxus#c8f88b6428e858b4ebe746e7b614649247691601"
 dependencies = [
  "bumpalo",
  "futures-channel",
@@ -555,7 +555,7 @@ dependencies = [
 [[package]]
 name = "dioxus-core-macro"
 version = "0.2.1"
-source = "git+https://github.com/DioxusLabs/dioxus#6924dddb92826a79cc80ad04ad43e0155f11d62d"
+source = "git+https://github.com/DioxusLabs/dioxus#c8f88b6428e858b4ebe746e7b614649247691601"
 dependencies = [
  "dioxus-rsx",
  "proc-macro2",
@@ -566,7 +566,7 @@ dependencies = [
 [[package]]
 name = "dioxus-hooks"
 version = "0.2.1"
-source = "git+https://github.com/DioxusLabs/dioxus#6924dddb92826a79cc80ad04ad43e0155f11d62d"
+source = "git+https://github.com/DioxusLabs/dioxus#c8f88b6428e858b4ebe746e7b614649247691601"
 dependencies = [
  "dioxus-core",
  "futures-channel",
@@ -576,7 +576,7 @@ dependencies = [
 [[package]]
 name = "dioxus-html"
 version = "0.2.1"
-source = "git+https://github.com/DioxusLabs/dioxus#6924dddb92826a79cc80ad04ad43e0155f11d62d"
+source = "git+https://github.com/DioxusLabs/dioxus#c8f88b6428e858b4ebe746e7b614649247691601"
 dependencies = [
  "async-trait",
  "dioxus-core",
@@ -591,12 +591,12 @@ dependencies = [
 [[package]]
 name = "dioxus-interpreter-js"
 version = "0.2.1"
-source = "git+https://github.com/DioxusLabs/dioxus#6924dddb92826a79cc80ad04ad43e0155f11d62d"
+source = "git+https://github.com/DioxusLabs/dioxus#c8f88b6428e858b4ebe746e7b614649247691601"
 
 [[package]]
 name = "dioxus-liveview"
 version = "0.1.0"
-source = "git+https://github.com/DioxusLabs/dioxus#6924dddb92826a79cc80ad04ad43e0155f11d62d"
+source = "git+https://github.com/DioxusLabs/dioxus#c8f88b6428e858b4ebe746e7b614649247691601"
 dependencies = [
  "anyhow",
  "axum",
@@ -618,8 +618,10 @@ dependencies = [
 [[package]]
 name = "dioxus-rsx"
 version = "0.0.1"
-source = "git+https://github.com/DioxusLabs/dioxus#6924dddb92826a79cc80ad04ad43e0155f11d62d"
+source = "git+https://github.com/DioxusLabs/dioxus#c8f88b6428e858b4ebe746e7b614649247691601"
 dependencies = [
+ "dioxus-core",
+ "internment",
  "proc-macro2",
  "quote",
  "serde",
@@ -1217,6 +1219,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "internment"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a798d7677f07d6f1e77be484ea8626ddb1566194de399f1206306820c406371"
+dependencies = [
+ "hashbrown",
+ "parking_lot",
 ]
 
 [[package]]
