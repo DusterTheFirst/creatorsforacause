@@ -55,52 +55,49 @@ impl TwitchLiveWatcher {
         }
     }
 
+    #[tracing::instrument(skip(self), fields(creators_names = ?self.creators_names))]
     pub async fn get_creators(&mut self) -> Option<Box<[Creator]>> {
-        get_creators(&self.helix_client, self.creators_names, &mut self.token).await
+        let client = &self.helix_client;
+        let creators_names = self.creators_names;
+        let token: &mut AppAccessToken = &mut self.token;
+
+        if token.is_elapsed() {
+            match token.refresh_token(client).await {
+                Ok(()) => trace!(expires_in = ?token.expires_in(), "refreshed access token"),
+                Err(error) => {
+                    error!(%error, "failed to refresh twitch access token");
+                }
+            };
+        }
+
+        let (users, streams) = tokio::join!(
+            get_user_info(client, creators_names, token),
+            get_live_statuses(client, creators_names, token)
+        );
+
+        let (users, streams) = users.zip(streams)?;
+
+        let mut creators = users
+            .into_iter()
+            .map(|user| {
+                Creator {
+                    id: user.id.take(),
+                    display_name: user.display_name.take(),
+                    href: format!("https://twitch.tv/{}", user.login),
+                    icon_url: user
+                        .profile_image_url
+                        // TODO: replace with placeholder?
+                        .expect("twitch streamer should have a profile image url"),
+                    stream: streams.get(&user.login).cloned(),
+                }
+            })
+            .collect::<Box<_>>();
+
+        // Return the array sorted
+        creators.sort_unstable();
+
+        Some(creators)
     }
-}
-
-async fn get_creators(
-    client: &twitch_api::HelixClient<'static, reqwest::Client>,
-    creators_names: &[&NicknameRef],
-    token: &mut AppAccessToken,
-) -> Option<Box<[Creator]>> {
-    if token.is_elapsed() {
-        match token.refresh_token(client).await {
-            Ok(()) => trace!(expires_in = ?token.expires_in(), "refreshed access token"),
-            Err(error) => {
-                error!(%error, "failed to refresh twitch access token");
-            }
-        };
-    }
-
-    let (users, streams) = tokio::join!(
-        get_user_info(client, creators_names, token),
-        get_live_statuses(client, creators_names, token)
-    );
-
-    let (users, streams) = users.zip(streams)?;
-
-    let mut creators = users
-        .into_iter()
-        .map(|user| {
-            Creator {
-                id: user.id.take(),
-                display_name: user.display_name.take(),
-                href: format!("https://twitch.tv/{}", user.login),
-                icon_url: user
-                    .profile_image_url
-                    // TODO: replace with placeholder?
-                    .expect("twitch streamer should have a profile image url"),
-                stream: streams.get(&user.login).cloned(),
-            }
-        })
-        .collect::<Box<_>>();
-
-    // Return the array sorted
-    creators.sort_unstable();
-
-    Some(creators)
 }
 
 async fn get_user_info(
