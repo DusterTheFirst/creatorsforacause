@@ -11,6 +11,7 @@ use crate::{
 };
 
 use self::{
+    tiltify::TiltifyWatcher,
     twitch::{TwitchEnvironment, TwitchLiveWatcher},
     youtube::YoutubeEnvironment,
 };
@@ -39,7 +40,7 @@ pub struct WatcherData {
     pub updated: OffsetDateTime,
     pub twitch: Box<[Creator]>,
     pub youtube: Box<[Creator]>,
-    pub tiltify: Campaign,
+    pub tiltify: Arc<Campaign>,
 }
 
 pub async fn live_watcher(
@@ -48,6 +49,12 @@ pub async fn live_watcher(
     config: &Config,
     sender: watch::Sender<WatcherDataReceive>,
 ) {
+    let mut tiltify_watcher = TiltifyWatcher::new(
+        http_client.clone(),
+        config.campaign,
+        environment.tiltify_api_key,
+    );
+
     let mut twitch_live_watcher = TwitchLiveWatcher::setup(
         http_client.clone(),
         environment.twitch,
@@ -62,7 +69,7 @@ pub async fn live_watcher(
         let (youtube, twitch, tiltify) = tokio::join!(
             youtube::get_creators(&http_client, config.creators.youtube, &environment.youtube),
             twitch_live_watcher.get_creators(),
-            tiltify::get_campaign(&http_client, config.campaign, &environment.tiltify_api_key),
+            tiltify_watcher.get_campaign(),
         );
 
         let twitch = twitch.expect("TODO: REPLACE WITH ERROR HANDLING");
