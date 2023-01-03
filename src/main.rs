@@ -1,35 +1,29 @@
 #![forbid(clippy::unwrap_used)]
 
-use std::{borrow::Cow, env, net::SocketAddr, str::FromStr};
+use std::{borrow::Cow, env, net::SocketAddr, sync::Arc};
 
 use color_eyre::eyre::Context;
-use opentelemetry::{
-    sdk::{
-        trace::{RandomIdGenerator, Sampler},
-        Resource,
-    },
-    KeyValue,
+use prometheus_client::{
+    metrics::info::Info,
+    registry::{Registry, Unit},
 };
-use opentelemetry_otlp::WithExportConfig;
 use sentry::SessionMode;
 use serde::Deserialize;
 use tokio::sync::watch;
-use tonic::{metadata::MetadataMap, transport::ClientTlsConfig};
-use tracing::{trace, Level};
-use tracing_error::ErrorLayer;
-use tracing_subscriber::{
-    filter::Targets, prelude::*, util::SubscriberInitExt, EnvFilter, Layer, Registry,
-};
+use tracing::trace;
 use watcher::WatcherEnvironment;
 
 use crate::{
     config::CONFIG,
+    metrics::metrics_server,
     watcher::{live_watcher, WatcherDataReceive},
     web::web_server,
 };
 
 mod config;
+mod metrics;
 mod model;
+mod tracing_setup;
 mod watcher;
 mod web;
 
@@ -89,7 +83,7 @@ async fn async_main() -> color_eyre::Result<()> {
         e => e.wrap_err("failed to get required environment variables")?,
     };
 
-    setup_tracing(environment.open_telemetry)?;
+    tracing_setup::setup_tracing(environment.open_telemetry)?;
 
     if let Ok(path) = dotenv {
         trace!(?path, "Loaded environment variables");
@@ -103,76 +97,30 @@ async fn async_main() -> color_eyre::Result<()> {
         .build()
         .expect("failed to setup http client");
 
+    let mut registry = <Registry>::default();
+    registry.register(
+        "build",
+        "Information about the current build of the server",
+        Info::new([
+            ("hash", git_version::git_version!()),
+            ("cargo_version", env!("CARGO_PKG_VERSION")),
+            ("cargo_name", env!("CARGO_PKG_NAME")),
+        ]),
+    );
+    // registry.register_with_unit(
+    //     "watcher_refresh_period",
+    //     "The time between refreshes of the watched data",
+    //     Unit::Seconds,
+    //     metric,
+    // );
+
     let (watcher_sender, watcher_receiver) = watch::channel::<WatcherDataReceive>(None);
 
     tokio::join!(
         live_watcher(reqwest_client, environment.watcher, &CONFIG, watcher_sender),
-        web_server(environment.listen, watcher_receiver,)
+        web_server(environment.listen, watcher_receiver),
+        metrics_server(Arc::new(registry))
     );
-
-    Ok(())
-}
-
-fn setup_tracing(environment: Option<OpenTelemetryEnvironment>) -> Result<(), color_eyre::Report> {
-    let tracer = environment
-        .map(|environment| {
-            opentelemetry_otlp::new_pipeline()
-                .tracing()
-                .with_trace_config(
-                    opentelemetry::sdk::trace::config()
-                        .with_sampler(Sampler::AlwaysOn)
-                        .with_id_generator(RandomIdGenerator::default())
-                        .with_max_events_per_span(64)
-                        .with_max_attributes_per_span(16)
-                        .with_max_links_per_span(16)
-                        .with_resource(Resource::new([KeyValue::new(
-                            opentelemetry_semantic_conventions::resource::SERVICE_NAME,
-                            "creatorsforacause",
-                        )])),
-                )
-                .with_exporter(
-                    opentelemetry_otlp::new_exporter()
-                        .tonic()
-                        .with_tls_config(ClientTlsConfig::new().domain_name("api.honeycomb.io"))
-                        .with_endpoint(environment.otlp_endpoint)
-                        .with_metadata({
-                            let mut meta = MetadataMap::new();
-
-                            meta.append(
-                                "x-honeycomb-team",
-                                environment
-                                    .honeycomb_key
-                                    .parse()
-                                    .expect("honeycomb_key should be ascii"),
-                            );
-
-                            meta
-                        }),
-                )
-                .install_batch(opentelemetry::runtime::TokioCurrentThread)
-        })
-        .transpose()
-        .wrap_err("failed to setup opentelemetry exporter")?;
-
-    Registry::default()
-        .with(tracing_subscriber::fmt::layer().pretty())
-        .with(
-            EnvFilter::builder()
-                .with_default_directive(Level::INFO.into())
-                .from_env()
-                .wrap_err("failed to parse RUST_LOG")?,
-        )
-        .with(ErrorLayer::default())
-        .with(tracer.map(|tracer| {
-            tracing_opentelemetry::layer()
-                .with_tracer(tracer)
-                .with_filter(
-                    Targets::from_str("creatorsforacause=trace")
-                        .expect("provided targets should be valid"),
-                )
-        }))
-        .with(sentry::integrations::tracing::layer())
-        .init();
 
     Ok(())
 }

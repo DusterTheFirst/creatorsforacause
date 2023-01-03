@@ -13,7 +13,6 @@ use crate::watcher::WatcherDataReceive;
 mod live_view;
 mod markup;
 
-#[tracing::instrument(skip(watcher_data))]
 pub async fn web_server(listen: SocketAddr, watcher_data: watch::Receiver<WatcherDataReceive>) {
     let app = Router::new()
         .nest("/", live_view::router(listen, watcher_data.clone()))
@@ -38,7 +37,6 @@ pub async fn web_server(listen: SocketAddr, watcher_data: watch::Receiver<Watche
 }
 
 #[axum::debug_handler]
-#[allow(clippy::type_complexity)]
 async fn json(
     State(watcher_data): State<watch::Receiver<WatcherDataReceive>>,
 ) -> Json<WatcherDataReceive> {
