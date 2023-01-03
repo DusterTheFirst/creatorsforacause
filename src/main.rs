@@ -107,12 +107,14 @@ async fn async_main() -> color_eyre::Result<()> {
             ("cargo_name", env!("CARGO_PKG_NAME")),
         ]),
     );
-    // registry.register_with_unit(
-    //     "watcher_refresh_period",
-    //     "The time between refreshes of the watched data",
-    //     Unit::Seconds,
-    //     metric,
-    // );
+    let watcher_refresh_period = <prometheus_client::metrics::gauge::Gauge>::default();
+    watcher_refresh_period.set(60 * 10); // TODO: load correctly
+    registry.register_with_unit(
+        "watcher_refresh_period",
+        "The time between refreshes of the watched data",
+        Unit::Seconds,
+        watcher_refresh_period,
+    );
 
     let (watcher_sender, watcher_receiver) = watch::channel::<WatcherDataReceive>(None);
 
