@@ -10,6 +10,8 @@ use sentry_tower::{SentryHttpLayer, SentryLayer};
 use tower_http::catch_panic::CatchPanicLayer;
 use tracing::{error, info};
 
+pub mod gauge_info;
+
 pub async fn metrics_server(registry: Arc<Registry>) {
     let router = Router::new()
         .route("/metrics", get(metrics).with_state(registry))
@@ -34,6 +36,8 @@ pub async fn metrics_server(registry: Arc<Registry>) {
 #[axum::debug_handler]
 async fn metrics(State(registry): State<Arc<Registry>>) -> Result<String, StatusCode> {
     let mut buffer = String::new();
+
+    // TODO: "application/openmetrics-text; version=1.0.0; charset=utf-8"
     match prometheus_client::encoding::text::encode(&mut buffer, &registry) {
         Ok(()) => Ok(buffer),
         Err(error) => {

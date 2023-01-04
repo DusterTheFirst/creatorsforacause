@@ -16,12 +16,16 @@ RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build application
 COPY . .
-RUN cargo build --release
+RUN set -eux; \
+    # Make Git happy (fly.toml does not get copied when running `fly deploy`)
+    git restore fly.toml; \
+    cargo build --release; \
+    objcopy --compress-debug-sections target/release/creatorsforacause /app/creatorsforacause
 
 FROM gcr.io/distroless/cc AS runtime
 
 COPY --from=builder \
-    /app/target/release/creatorsforacause \
-    /
+    /app/creatorsforacause \
+    /creatorsforacause
 
 CMD [ "/creatorsforacause" ]

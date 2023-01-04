@@ -3,10 +3,7 @@
 use std::{borrow::Cow, env, net::SocketAddr, sync::Arc};
 
 use color_eyre::eyre::Context;
-use prometheus_client::{
-    metrics::info::Info,
-    registry::{Registry, Unit},
-};
+use prometheus_client::registry::{Registry, Unit};
 use sentry::SessionMode;
 use serde::Deserialize;
 use tokio::sync::watch;
@@ -15,7 +12,7 @@ use watcher::WatcherEnvironment;
 
 use crate::{
     config::CONFIG,
-    metrics::metrics_server,
+    metrics::{metrics_server, gauge_info::GaugeInfo},
     watcher::{live_watcher, WatcherDataReceive},
     web::web_server,
 };
@@ -101,7 +98,7 @@ async fn async_main() -> color_eyre::Result<()> {
     registry.register(
         "build",
         "Information about the current build of the server",
-        Info::new([
+        GaugeInfo::new([
             ("hash", git_version::git_version!()),
             ("cargo_version", env!("CARGO_PKG_VERSION")),
             ("cargo_name", env!("CARGO_PKG_NAME")),
