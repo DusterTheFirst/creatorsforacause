@@ -1,9 +1,2 @@
 target/
-.vscode/
-
-LICENSE
-README.md
-
-.gitignore
 .env
-fly.toml
