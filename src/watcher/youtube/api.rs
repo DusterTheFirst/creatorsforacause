@@ -8,6 +8,8 @@ use once_cell::sync::Lazy;
 use reqwest::Url;
 use tracing::warn;
 
+use crate::metrics::types::YoutubeQuotaUsageMetric;
+
 #[aliri_braid::braid(serde)]
 pub struct YoutubeHandle;
 
@@ -43,6 +45,7 @@ pub async fn get_creator_info(
     http_client: &reqwest::Client,
     api_key: &ApiKeyRef,
     channel_id: ChannelId,
+    youtube_quota_usage: &YoutubeQuotaUsageMetric,
 ) -> Result<CreatorInfo, WebError> {
     // Channel API endpoint
     static CHANNEL_API_URL: Lazy<Url> = Lazy::new(|| {
@@ -67,6 +70,10 @@ pub async fn get_creator_info(
         .header("accept", "application/json")
         .build()
         .expect("youtube api request should be a valid request");
+
+    // 1 quota unit
+    // https://developers.google.com/youtube/v3/getting-started#calculating-quota-usage
+    youtube_quota_usage.inc_by(1);
 
     // Get the headers and return an error if non-success status code
     let response = http_client
@@ -115,6 +122,7 @@ pub async fn get_video_info(
     http_client: &reqwest::Client,
     api_key: &ApiKeyRef,
     video_id: &VideoIdRef,
+    youtube_quota_usage: &YoutubeQuotaUsageMetric,
 ) -> Result<VideoInfo, WebError> {
     // Video API endpoint
     static VIDEO_API_URL: Lazy<Url> = Lazy::new(|| {
@@ -139,6 +147,10 @@ pub async fn get_video_info(
         .header("accept", "application/json")
         .build()
         .expect("youtube api request should be a valid request");
+
+    // 1 quota unit
+    // https://developers.google.com/youtube/v3/getting-started#calculating-quota-usage
+    youtube_quota_usage.inc_by(1);
 
     // Get the headers and return an error if non-success status code
     let response = http_client

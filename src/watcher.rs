@@ -1,12 +1,16 @@
-use std::{sync::Arc, time::Duration};
+use std::{iter, sync::Arc};
 
+use color_eyre::eyre::{Context, ContextCompat};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tokio::{sync::watch, time::Instant};
+use tokio::sync::watch;
 use tracing::trace;
 
 use crate::{
     config::Config,
+    metrics::types::{
+        LiveCreatorsMetric, StreamingService, StreamingServiceMetricKey, YoutubeQuotaUsageMetric,
+    },
     model::{Campaign, Creator},
 };
 
@@ -48,6 +52,8 @@ pub async fn live_watcher(
     environment: WatcherEnvironment,
     config: &Config,
     sender: watch::Sender<WatcherDataReceive>,
+    live_creators: LiveCreatorsMetric,
+    youtube_quota_usage: YoutubeQuotaUsageMetric,
 ) {
     let mut tiltify_watcher = TiltifyWatcher::new(
         http_client.clone(),
@@ -62,18 +68,42 @@ pub async fn live_watcher(
     )
     .await;
 
-    let mut next_refresh = Instant::now();
-    let refresh_interval = Duration::from_secs(10 * 60); // 10 minutes
+    let mut interval = tokio::time::interval(config.refresh_period);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
+        interval.tick().await;
+
         let (youtube, twitch, tiltify) = tokio::join!(
-            youtube::get_creators(&http_client, config.creators.youtube, &environment.youtube),
+            youtube::get_creators(
+                &http_client,
+                config.creators.youtube,
+                &environment.youtube,
+                &youtube_quota_usage
+            ),
             twitch_live_watcher.get_creators(),
             tiltify_watcher.get_campaign(),
         );
 
-        let twitch = twitch.expect("TODO: REPLACE WITH ERROR HANDLING");
-        let tiltify = tiltify.expect("TODO: REPLACE WITH ERROR HANDLING");
+        let twitch = twitch
+            .wrap_err("failed to update twitch creators")
+            .expect("TODO: REPLACE WITH ERROR HANDLING");
+        let tiltify = tiltify
+            .wrap_err("failed to update tiltify creators")
+            .expect("TODO: REPLACE WITH ERROR HANDLING");
+
+        let twitch_iter = twitch.iter().zip(iter::repeat(StreamingService::Twitch));
+        let youtube_iter = youtube.iter().zip(iter::repeat(StreamingService::Youtube));
+
+        for (creator, service) in twitch_iter.chain(youtube_iter) {
+            live_creators
+                .get_or_create(&StreamingServiceMetricKey {
+                    service,
+                    username: creator.handle.clone(),
+                    id: creator.id.clone(),
+                })
+                .set(creator.stream.is_some().into());
+        }
 
         sender.send_replace(Some(Arc::new(WatcherData {
             updated: OffsetDateTime::now_utc(),
@@ -82,10 +112,6 @@ pub async fn live_watcher(
             tiltify,
         })));
 
-        // Refresh every 10 minutes
-        next_refresh += refresh_interval;
-        trace!(?refresh_interval, "Waiting for next refresh");
-
-        tokio::time::sleep_until(next_refresh).await;
+        trace!(?config.refresh_period, "waiting for next refresh");
     }
 }

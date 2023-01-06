@@ -86,11 +86,12 @@ impl TwitchLiveWatcher {
                     id: user.id.take(),
                     display_name: user.display_name.take(),
                     href: format!("https://twitch.tv/{}", user.login),
+                    stream: streams.get(&user.login).cloned(),
+                    handle: user.login.take(),
                     icon_url: user
                         .profile_image_url
                         // TODO: replace with placeholder?
                         .expect("twitch streamer should have a profile image url"),
-                    stream: streams.get(&user.login).cloned(),
                 }
             })
             .collect::<Box<_>>();

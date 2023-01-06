@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use twitch_api::types::NicknameRef;
 
 use crate::watcher::youtube::api::YoutubeHandleRef;
@@ -17,9 +19,12 @@ pub struct CampaignConfig {
 pub struct Config {
     pub campaign: CampaignConfig,
     pub creators: CreatorNames,
+    pub refresh_period: Duration,
 }
 
 pub static CONFIG: Config = Config {
+    refresh_period: Duration::from_secs(10 * 60), // 10 minutes
+
     campaign: CampaignConfig { id: 468510 },
 
     // TODO: FIXME: User IDs?

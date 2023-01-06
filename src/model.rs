@@ -8,8 +8,10 @@ pub mod javascript_unix_timestamp;
 
 #[derive(Debug, Serialize)]
 pub struct Creator {
+    /// The internal, unchanging ID used by the respective service
     pub id: String,
     pub display_name: String,
+    pub handle: String,
     pub href: String,
     pub icon_url: String,
     pub stream: Option<LiveStreamDetails>,

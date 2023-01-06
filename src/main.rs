@@ -1,6 +1,6 @@
 #![forbid(clippy::unwrap_used)]
 
-use std::{borrow::Cow, env, net::SocketAddr, sync::Arc};
+use std::{borrow::Cow, env, io::ErrorKind, net::SocketAddr, sync::Arc};
 
 use color_eyre::eyre::Context;
 use prometheus_client::registry::{Registry, Unit};
@@ -12,7 +12,11 @@ use watcher::WatcherEnvironment;
 
 use crate::{
     config::CONFIG,
-    metrics::{metrics_server, gauge_info::GaugeInfo},
+    metrics::{
+        gauge_info::GaugeInfo,
+        metrics_server,
+        types::{LiveCreatorsMetric, WatcherRefreshPeriodMetric, YoutubeQuotaUsageMetric},
+    },
     watcher::{live_watcher, WatcherDataReceive},
     web::web_server,
 };
@@ -53,7 +57,17 @@ async fn main() -> color_eyre::Result<()> {
 // FIXME: color_eyre or better error context providing outside of panics, tracing_error?
 async fn async_main() -> color_eyre::Result<()> {
     // Try to load .env file, quietly fail
-    let dotenv = dotenv::dotenv();
+    match dotenv::dotenv() {
+        Err(dotenv::Error::Io(io_error)) if io_error.kind() == ErrorKind::NotFound => {
+            eprintln!("[WARN] no `.env` file available. environment variables may be missing")
+        }
+        Err(error) => {
+            eprintln!("[WARN] failed to load `.env` file: {error}");
+        }
+        Ok(path) => {
+            eprintln!("[INFO] loaded environment variables from {path:?}");
+        }
+    }
 
     // Install pretty error formatting
     color_eyre::install()?;
@@ -82,10 +96,6 @@ async fn async_main() -> color_eyre::Result<()> {
 
     tracing_setup::setup_tracing(environment.open_telemetry)?;
 
-    if let Ok(path) = dotenv {
-        trace!(?path, "Loaded environment variables");
-    }
-
     trace!(?CONFIG, "static config set");
 
     // TODO: more configuration
@@ -104,19 +114,57 @@ async fn async_main() -> color_eyre::Result<()> {
             ("cargo_name", env!("CARGO_PKG_NAME")),
         ]),
     );
-    let watcher_refresh_period = <prometheus_client::metrics::gauge::Gauge>::default();
-    watcher_refresh_period.set(60 * 10); // TODO: load correctly
-    registry.register_with_unit(
-        "watcher_refresh_period",
-        "The time between refreshes of the watched data",
-        Unit::Seconds,
-        watcher_refresh_period,
-    );
+
+    {
+        let watcher_refresh_period = WatcherRefreshPeriodMetric::default();
+        watcher_refresh_period.set(
+            CONFIG
+                .refresh_period
+                .as_secs()
+                .try_into()
+                .expect("refresh_period should not overflow a i64"),
+        );
+        registry.register_with_unit(
+            "watcher_refresh_period",
+            "The time between refreshes of the watched data",
+            Unit::Seconds,
+            watcher_refresh_period,
+        );
+    }
+
+    let live_creators = {
+        let live_creators = LiveCreatorsMetric::default();
+        registry.register(
+            "live_creators",
+            "All of the creators and whether they are live or not",
+            live_creators.clone(),
+        );
+
+        live_creators
+    };
+
+    let youtube_quota_usage = {
+        let youtube_quota_usage = YoutubeQuotaUsageMetric::default();
+        registry.register(
+            "youtube_quota_usage",
+            "The estimated usage of the youtube API quota",
+            youtube_quota_usage.clone(),
+        );
+
+        youtube_quota_usage
+    };
 
     let (watcher_sender, watcher_receiver) = watch::channel::<WatcherDataReceive>(None);
 
     tokio::join!(
-        live_watcher(reqwest_client, environment.watcher, &CONFIG, watcher_sender),
+        live_watcher(
+            reqwest_client,
+            environment.watcher,
+            &CONFIG,
+            watcher_sender,
+            live_creators,
+            youtube_quota_usage
+        ),
         web_server(environment.listen, watcher_receiver),
         metrics_server(Arc::new(registry))
     );

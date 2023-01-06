@@ -6,7 +6,10 @@ use time::{format_description::well_known, OffsetDateTime};
 use tokio::pin;
 use tracing::{debug, error, info, warn, Instrument};
 
-use crate::model::{Creator, LiveStreamDetails};
+use crate::{
+    metrics::types::YoutubeQuotaUsageMetric,
+    model::{Creator, LiveStreamDetails},
+};
 
 use self::{
     api::{get_creator_info, get_video_info, ApiKey, ApiKeyRef, CreatorInfo, YoutubeHandleRef},
@@ -27,6 +30,7 @@ pub async fn get_creators(
     http_client: &reqwest::Client,
     creator_names: &[&YoutubeHandleRef],
     environment: &YoutubeEnvironment,
+    youtube_quota_usage: &YoutubeQuotaUsageMetric,
 ) -> Box<[Creator]> {
     pin! {
         let futures = FuturesUnordered::new();
@@ -39,8 +43,18 @@ pub async fn get_creators(
             async move {
                 tokio::join!(
                     // Cache this and or the user ID
-                    get_creator_info_from_handle(http_client, &environment.api_key, creator_name),
-                    get_livestream_details(http_client, &environment.api_key, creator_name)
+                    get_creator_info_from_handle(
+                        http_client,
+                        &environment.api_key,
+                        creator_name,
+                        youtube_quota_usage
+                    ),
+                    get_livestream_details(
+                        http_client,
+                        &environment.api_key,
+                        creator_name,
+                        youtube_quota_usage
+                    )
                 )
             }
             .instrument(span),
@@ -74,6 +88,7 @@ pub async fn get_creators(
                     id: creator_info.id.take(),
                     display_name,
                     href: format!("https://youtube.com/{custom_url}"),
+                    handle: custom_url,
                     icon_url,
                     stream: livestream_details,
                 });
@@ -91,6 +106,7 @@ async fn get_creator_info_from_handle(
     http_client: &reqwest::Client,
     api_key: &ApiKeyRef,
     handle: &YoutubeHandleRef,
+    youtube_quota_usage: &YoutubeQuotaUsageMetric,
 ) -> Option<CreatorInfo> {
     let channel_id = match get_channel_id(http_client, handle).await {
         Ok(channel_id) => channel_id,
@@ -100,13 +116,14 @@ async fn get_creator_info_from_handle(
         }
     }?;
 
-    let creator_info = match get_creator_info(http_client, api_key, channel_id).await {
-        Ok(creator_info) => creator_info,
-        Err(error) => {
-            error!(?error, "failed to get creator info");
-            return None;
-        }
-    };
+    let creator_info =
+        match get_creator_info(http_client, api_key, channel_id, youtube_quota_usage).await {
+            Ok(creator_info) => creator_info,
+            Err(error) => {
+                error!(?error, "failed to get creator info");
+                return None;
+            }
+        };
 
     Some(creator_info)
 }
@@ -115,6 +132,7 @@ async fn get_livestream_details(
     http_client: &reqwest::Client,
     api_key: &ApiKeyRef,
     creator_name: &YoutubeHandleRef,
+    youtube_quota_usage: &YoutubeQuotaUsageMetric,
 ) -> Option<LiveStreamDetails> {
     let video_id = match get_livestream_video_id(http_client, creator_name).await {
         Ok(video_id) => video_id,
@@ -127,13 +145,14 @@ async fn get_livestream_details(
     if let Some(video_id) = video_id {
         debug!(%video_id, "creator has live stream");
 
-        let video_info = match get_video_info(http_client, api_key, &video_id).await {
-            Ok(video_info) => video_info,
-            Err(error) => {
-                error!(?error, "failed to get video info");
-                return None;
-            }
-        };
+        let video_info =
+            match get_video_info(http_client, api_key, &video_id, youtube_quota_usage).await {
+                Ok(video_info) => video_info,
+                Err(error) => {
+                    error!(?error, "failed to get video info");
+                    return None;
+                }
+            };
 
         if !matches!(
             video_info.snippet.live_broadcast_content.as_deref(),
