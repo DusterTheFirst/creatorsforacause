@@ -1,40 +1,38 @@
 use std::net::SocketAddr;
 
-use askama::Template;
-use axum::{extract::WebSocketUpgrade, routing::get, Router};
+use axum::{extract::WebSocketUpgrade, http::HeaderValue, routing::get, Router};
+use hyper::header;
 use tokio::sync::watch;
 
 use crate::watcher::WatcherDataReceive;
 
 use super::markup::{dashboard, DashboardProps};
 
-#[derive(Debug, Template)]
-#[template(path = "dashboard.html")]
-struct Dashboard {
-    glue: String,
-}
-
-pub(super) fn router(
-    listen: SocketAddr,
-    watcher_data: watch::Receiver<WatcherDataReceive>,
-) -> Router {
+pub fn router(listen: SocketAddr, watcher_data: watch::Receiver<WatcherDataReceive>) -> Router {
     let view = dioxus_liveview::LiveViewPool::new();
 
     Router::new()
         .route(
-            "/",
+            "/glue.js",
             get(move || async move {
                 #[cfg(debug_assertions)]
-                let domain = &format!("ws://{listen}/ws");
+                let domain = &format!("ws://{listen}/live-view/ws");
 
                 #[cfg(not(debug_assertions))]
                 let _ = listen;
                 #[cfg(not(debug_assertions))]
-                let domain = "wss://creatorsforacause.fly.dev/ws";
+                let domain = "wss://creatorsforacause.fly.dev/live-view/ws";
 
-                Dashboard {
-                    glue: dioxus_liveview::interpreter_glue(domain),
-                }
+                (
+                    [(
+                        header::CONTENT_TYPE,
+                        HeaderValue::from_static("text/javascript"),
+                    )],
+                    dioxus_liveview::interpreter_glue(domain)
+                        .trim_start_matches("\n<script>")
+                        .trim_end_matches("</script>\n    ")
+                        .to_string(),
+                )
             }),
         )
         .route(

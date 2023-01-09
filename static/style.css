@@ -1,0 +1,115 @@
+/* CSS Reset */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    font: inherit;
+}
+
+html {
+    color-scheme: dark light;
+}
+
+body {
+    min-height: 100vh;
+}
+
+img,
+picture,
+svg,
+video {
+    display: block;
+    max-width: 100%;
+}
+/* END CSS Reset */
+
+:root {
+    --creator-card-width: 15em;
+    --creator-card-image-width: 10em;
+
+    --text-color: #ffffff;
+    --background-color: #222222;
+    --card-color: #444444;
+
+    --card-margin: 2em 1em;
+    --card-padding: 2em 1em;
+}
+
+html,
+body {
+    margin: 0.5em;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    touch-action: manipulation;
+}
+
+a {
+    color: var(--text-color);
+}
+
+/* Sticky Headers */
+h1 {
+    background-color: var(--background-color);
+    position: sticky;
+    z-index: 1;
+    top: 0em;
+}
+
+.platforms {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: row;
+}
+
+.platforms .platform {
+    text-align: center;
+
+    flex-grow: 1;
+    flex-shrink: 0;
+    flex-basis: var(--creator-card-width);
+
+    border-color: #ffffff;
+    border-style: solid;
+    border-width: 0.2em;
+    border-radius: 10px;
+}
+
+.platform .creators {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-evenly;
+    text-align: start;
+}
+
+.creator {
+    width: var(--creator-card-width);
+    margin: var(--card-margin);
+    padding: var(--card-padding);
+    background-color: var(--card-color);
+
+    border-color: #ffffff;
+    border-style: solid;
+    border-width: 0.2em;
+    border-radius: 10px;
+}
+
+.creator.live {
+    border-color: #ff0000;
+}
+
+.creator img {
+    width: var(--creator-card-image-width);
+    border-radius: 50%;
+}
+
+.creator .stream a {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    /* FIXME: Cut off if too long */
+}

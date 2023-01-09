@@ -11,8 +11,6 @@ lto = true
 
 [dependencies]
 aliri_braid = "^0.3"
-askama = { git = "https://github.com/djc/askama", version = "^0.11", default-features = false, features = ["config"] }
-askama_axum = { git = "https://github.com/djc/askama", version = "^0.1", default-features = false }
 axum = { version = "^0.6", features = ["macros"] }
 color-eyre = "^0.6"
 dioxus = { version = "^0.3" }

@@ -3,7 +3,6 @@ use tokio::sync::watch;
 
 use crate::{
     watcher::{WatcherData, WatcherDataReceive},
-    web::markup::date::DATE_RENDERER,
 };
 
 use self::creator_card::creator_card;
@@ -51,7 +50,7 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
     {
         cx.render(rsx! {
             main {
-                script { DATE_RENDERER }
+                h1 { "Creators for a Cause" }
                 p {
                     "Updated: "
                     locale_date { date: updated }
@@ -61,7 +60,6 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                 //         "document.currentScript.parentElement.appendChild(document.createTextNode(new Date({js_timestamp}).toLocaleString()));"
                 //     }
                 // }
-                h1 { "Creators for a Cause" }
                 section {
                     h2 { "Fundraiser" }
                     p { "Together we have raised $TODO:"}

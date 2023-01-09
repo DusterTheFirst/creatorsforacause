@@ -3,8 +3,6 @@ use time::OffsetDateTime;
 
 use crate::model::javascript_unix_timestamp;
 
-pub static DATE_RENDERER: &str = include_str!("date_renderer.js");
-
 #[derive(Debug, Props)]
 pub struct CreatorCardProps<'c> {
     pub date: &'c OffsetDateTime,
