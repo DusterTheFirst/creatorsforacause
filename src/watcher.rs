@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use color_eyre::eyre::{Context, ContextCompat};
+use color_eyre::eyre::Context;
+use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tokio::sync::watch;
-use tracing::trace;
+use tracing::{error, trace};
 
 use crate::{
     config::Config,
@@ -71,23 +72,29 @@ pub async fn live_watcher(
     loop {
         interval.tick().await;
 
-        let (youtube, twitch, tiltify) = tokio::join!(
+        let result = tokio::try_join!(
             youtube::get_creators(
                 &http_client,
                 config.creators.youtube,
                 &environment.youtube,
                 &youtube_quota_usage
-            ),
-            twitch_live_watcher.get_creators(),
-            tiltify_watcher.get_campaign(),
+            )
+            .map(|youtube| youtube.wrap_err("failed to update youtube creators")),
+            twitch_live_watcher
+                .get_creators()
+                .map(|twitch| twitch.wrap_err("failed to update twitch creators")),
+            tiltify_watcher
+                .get_campaign()
+                .map(|tiltify| tiltify.wrap_err("failed to update tiltify data")),
         );
 
-        let twitch = twitch
-            .wrap_err("failed to update twitch creators")
-            .expect("TODO: REPLACE WITH ERROR HANDLING");
-        let tiltify = tiltify
-            .wrap_err("failed to update tiltify creators")
-            .expect("TODO: REPLACE WITH ERROR HANDLING");
+        let (youtube, twitch, tiltify) = match result {
+            Ok(success) => success,
+            Err(error) => {
+                error!(%error);
+                continue;
+            }
+        };
 
         let mut creators = twitch
             .into_iter()
@@ -106,6 +113,7 @@ pub async fn live_watcher(
                 .set(creator.stream.is_some().into());
         }
 
+        // TODO: unmerge creators and tiltify?
         sender.send_replace(Some(Arc::new(WatcherData {
             updated: OffsetDateTime::now_utc(),
             creators,

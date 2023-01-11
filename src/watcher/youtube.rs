@@ -1,11 +1,11 @@
 use std::fmt::Debug;
 
 use color_eyre::eyre::Context;
-use futures::stream::{FuturesUnordered, StreamExt};
+use futures::{stream::FuturesUnordered, TryStreamExt};
 use serde::Deserialize;
 use time::{format_description::well_known, OffsetDateTime};
 use tokio::pin;
-use tracing::{debug, info, warn, Instrument};
+use tracing::{debug, info, Instrument};
 
 use crate::{
     metrics::types::YoutubeQuotaUsageMetric,
@@ -32,15 +32,12 @@ pub async fn get_creators(
     creator_names: &[&YoutubeHandleRef],
     environment: &YoutubeEnvironment,
     youtube_quota_usage: &YoutubeQuotaUsageMetric,
-) -> Vec<Creator> {
-    pin! {
-        let futures = FuturesUnordered::new();
-    };
+) -> color_eyre::Result<Vec<Creator>> {
+    let futures: FuturesUnordered<_> = creator_names
+        .iter()
+        .map(|creator_name| {
+            let span = tracing::trace_span!("creator_update", ?creator_name);
 
-    for creator_name in creator_names.iter() {
-        let span = tracing::trace_span!("creator_update", ?creator_name);
-
-        futures.push(
             async move {
                 tokio::try_join!(
                     // Cache this and or the user ID
@@ -58,50 +55,43 @@ pub async fn get_creators(
                     )
                 )
             }
-            .instrument(span),
-        );
-    }
+            .instrument(span)
+        })
+        .collect();
+
+    pin!(futures);
 
     // Drive all futures to completion, collecting their results
     futures
-        .filter_map(|result| async move {
-            match result {
-                Ok((creator_info, livestream_details)) => {
-                    let display_name = creator_info
-                        .snippet
-                        .title
-                        .expect("title field should be present in snippet");
-                    let icon_url = creator_info
-                        .snippet
-                        .thumbnails
-                        .expect("thumbnails field should be present in snippet")
-                        .default
-                        .expect("default thumbnail should exist")
-                        .url
-                        .expect("default thumbnail url should exist");
-                    let custom_url = creator_info
-                        .snippet
-                        .custom_url
-                        .expect("custom_url field should be present in snippet");
+        .map_ok(|(creator_info, livestream_details)| {
+            let display_name = creator_info
+                .snippet
+                .title
+                .expect("title field should be present in snippet");
+            let icon_url = creator_info
+                .snippet
+                .thumbnails
+                .expect("thumbnails field should be present in snippet")
+                .default
+                .expect("default thumbnail should exist")
+                .url
+                .expect("default thumbnail url should exist");
+            let custom_url = creator_info
+                .snippet
+                .custom_url
+                .expect("custom_url field should be present in snippet");
 
-                    Some(Creator {
-                        service: StreamingService::Youtube,
-                        id: creator_info.id.take(),
-                        display_name,
-                        href: format!("https://youtube.com/{custom_url}"),
-                        handle: custom_url,
-                        icon_url,
-                        stream: livestream_details,
-                    })
-                }
-                Err(error) => {
-                    warn!(%error, "failed to get creator info");
-
-                    None
-                }
+            Creator {
+                service: StreamingService::Youtube,
+                id: creator_info.id.take(),
+                display_name,
+                href: format!("https://youtube.com/{custom_url}"),
+                handle: custom_url,
+                icon_url,
+                stream: livestream_details,
             }
         })
-        .collect()
+        .try_collect()
         .await
 }
 

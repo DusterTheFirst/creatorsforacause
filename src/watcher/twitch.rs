@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 
+use color_eyre::eyre::{Context, ContextCompat};
+use futures::{stream::FuturesUnordered, FutureExt, TryFutureExt, TryStreamExt};
 use serde::Deserialize;
 use time::{format_description::well_known, OffsetDateTime};
-use tracing::{error, info, trace};
+use tokio::pin;
+use tracing::{info, trace};
 use twitch_api::{
     helix::{
         streams::GetStreamsRequest,
         users::{GetUsersRequest, User},
+        ClientRequestError,
     },
     twitch_oauth2::{AppAccessToken, ClientId, ClientSecret, TwitchToken},
     types::{Nickname, NicknameRef},
@@ -58,46 +62,44 @@ impl TwitchLiveWatcher {
     }
 
     #[tracing::instrument(skip(self), fields(creators_names = ?self.creators_names))]
-    pub async fn get_creators(&mut self) -> Option<Vec<Creator>> {
+    pub async fn get_creators(&mut self) -> color_eyre::Result<Vec<Creator>> {
         let client = &self.helix_client;
         let creators_names = self.creators_names;
         let token: &mut AppAccessToken = &mut self.token;
 
         if token.is_elapsed() {
-            match token.refresh_token(client).await {
-                Ok(()) => trace!(expires_in = ?token.expires_in(), "refreshed access token"),
-                Err(error) => {
-                    error!(%error, "failed to refresh twitch access token");
-                }
-            };
+            token
+                .refresh_token(client)
+                .await
+                .wrap_err("failed to refresh twitch access token")?;
+
+            trace!(expires_in = ?token.expires_in(), "refreshed access token");
         }
 
-        let (users, streams) = tokio::join!(
-            get_user_info(client, creators_names, token),
+        let (users, streams) = tokio::try_join!(
+            get_user_info(client, creators_names, token)
+                .map(|users| users.wrap_err("failed to fetch user info")),
             get_live_statuses(client, creators_names, token)
-        );
+                .map(|users| users.wrap_err("failed to fetch live statuses"))
+        )?;
 
-        let (users, streams) = users.zip(streams)?;
-
-        Some(
-            users
-                .into_iter()
-                .map(|user| {
-                    Creator {
-                        service: StreamingService::Twitch,
-                        id: user.id.take(),
-                        display_name: user.display_name.take(),
-                        href: format!("https://twitch.tv/{}", user.login),
-                        stream: streams.get(&user.login).cloned(),
-                        handle: user.login.take(),
-                        icon_url: user
-                            .profile_image_url
-                            // TODO: replace with placeholder?
-                            .expect("twitch streamer should have a profile image url"),
-                    }
+        users
+            .into_iter()
+            .map(|user| {
+                Ok(Creator {
+                    service: StreamingService::Twitch,
+                    id: user.id.take(),
+                    display_name: user.display_name.take(),
+                    href: format!("https://twitch.tv/{}", user.login),
+                    stream: streams.get(&user.login).cloned(),
+                    handle: user.login.take(),
+                    icon_url: user
+                        .profile_image_url
+                        // TODO: replace with placeholder?
+                        .wrap_err("twitch streamer should have a profile image url")?,
                 })
-                .collect(),
-        )
+            })
+            .collect()
     }
 }
 
@@ -105,23 +107,20 @@ async fn get_user_info(
     client: &twitch_api::HelixClient<'static, reqwest::Client>,
     creators_names: &[&NicknameRef],
     token: &AppAccessToken,
-) -> Option<Vec<User>> {
-    // TODO: split if more than 100 users, lol
+) -> Result<Vec<User>, ClientRequestError<reqwest::Error>> {
+    // Split into chunks if more than 100 users, lol
+    let futures: FuturesUnordered<_> = creators_names
+        .chunks(100)
+        .map(|creators_names| {
+            client
+                .req_get(GetUsersRequest::logins(creators_names), token)
+                .map_ok(|creators| creators.data)
+        })
+        .collect();
 
-    let creators = client
-        .req_get(GetUsersRequest::logins(creators_names), token)
-        .await;
+    pin!(futures);
 
-    let creators = match creators {
-        Ok(creators) => creators,
-        Err(error) => {
-            error!(%error, "failed to get livestreams");
-
-            return None;
-        }
-    };
-
-    Some(creators.data)
+    futures.try_concat().await
 }
 
 #[tracing::instrument(skip(client, creators_names, token))]
@@ -129,22 +128,13 @@ async fn get_live_statuses(
     client: &twitch_api::HelixClient<'static, reqwest::Client>,
     creators_names: &[&NicknameRef],
     token: &AppAccessToken,
-) -> Option<HashMap<Nickname, LiveStreamDetails>> {
+) -> Result<HashMap<Nickname, LiveStreamDetails>, ClientRequestError<reqwest::Error>> {
     let live_streams = client
         .req_get(
             GetStreamsRequest::user_logins(creators_names).first(100),
             token,
         )
-        .await;
-
-    let live_streams = match live_streams {
-        Ok(live_streams) => live_streams,
-        Err(error) => {
-            error!(%error, "failed to get livestreams");
-
-            return None;
-        }
-    };
+        .await?;
 
     let mut all_streams = HashMap::with_capacity(creators_names.len());
 
@@ -168,15 +158,8 @@ async fn get_live_statuses(
             (stream.user_login, livestream_details)
         }));
 
-        live_streams = match previous.get_next(client, token).await {
-            Ok(live_streams) => live_streams,
-            Err(error) => {
-                error!(%error, "failed to get next pagination result");
-
-                return Some(all_streams);
-            }
-        }
+        live_streams = previous.get_next(client, token).await?;
     }
 
-    Some(all_streams)
+    Ok(all_streams)
 }
