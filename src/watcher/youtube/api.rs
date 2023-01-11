@@ -6,6 +6,7 @@ use google_youtube3::api::{
 use hyper::StatusCode;
 use once_cell::sync::Lazy;
 use reqwest::Url;
+use thiserror::Error;
 use tracing::warn;
 
 use crate::metrics::types::YoutubeQuotaUsageMetric;
@@ -28,11 +29,14 @@ impl Debug for ApiKey {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum WebError {
-    Request(reqwest::Error),
+    #[error("failed to execute request")]
+    Request(#[source] reqwest::Error),
+    #[error("server returned a non-success HTTP code: {0}")]
     Status(StatusCode),
-    Body(reqwest::Error),
+    #[error("failed to read response body")]
+    Body(#[source] reqwest::Error),
 }
 
 pub struct CreatorInfo {
@@ -40,7 +44,7 @@ pub struct CreatorInfo {
     pub id: ChannelId,
 }
 
-#[tracing::instrument(skip(http_client, api_key))]
+#[tracing::instrument(skip(http_client, api_key, youtube_quota_usage))]
 pub async fn get_creator_info(
     http_client: &reqwest::Client,
     api_key: &ApiKeyRef,
@@ -117,7 +121,8 @@ pub struct VideoInfo {
     pub snippet: VideoSnippet,
 }
 
-#[tracing::instrument(skip(http_client, api_key))]
+// TODO: API CLIENT STRUCT TO HOLD ONTO METRIC AND API KEY
+#[tracing::instrument(skip(http_client, api_key, youtube_quota_usage))]
 pub async fn get_video_info(
     http_client: &reqwest::Client,
     api_key: &ApiKeyRef,

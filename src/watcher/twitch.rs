@@ -12,7 +12,7 @@ use twitch_api::{
     types::{Nickname, NicknameRef},
 };
 
-use crate::model::{Creator, LiveStreamDetails};
+use crate::model::{Creator, LiveStreamDetails, StreamingService};
 
 #[derive(Deserialize, Debug)]
 pub struct TwitchEnvironment {
@@ -58,7 +58,7 @@ impl TwitchLiveWatcher {
     }
 
     #[tracing::instrument(skip(self), fields(creators_names = ?self.creators_names))]
-    pub async fn get_creators(&mut self) -> Option<Box<[Creator]>> {
+    pub async fn get_creators(&mut self) -> Option<Vec<Creator>> {
         let client = &self.helix_client;
         let creators_names = self.creators_names;
         let token: &mut AppAccessToken = &mut self.token;
@@ -79,27 +79,25 @@ impl TwitchLiveWatcher {
 
         let (users, streams) = users.zip(streams)?;
 
-        let mut creators = users
-            .into_iter()
-            .map(|user| {
-                Creator {
-                    id: user.id.take(),
-                    display_name: user.display_name.take(),
-                    href: format!("https://twitch.tv/{}", user.login),
-                    stream: streams.get(&user.login).cloned(),
-                    handle: user.login.take(),
-                    icon_url: user
-                        .profile_image_url
-                        // TODO: replace with placeholder?
-                        .expect("twitch streamer should have a profile image url"),
-                }
-            })
-            .collect::<Box<_>>();
-
-        // Return the array sorted
-        creators.sort_unstable();
-
-        Some(creators)
+        Some(
+            users
+                .into_iter()
+                .map(|user| {
+                    Creator {
+                        service: StreamingService::Twitch,
+                        id: user.id.take(),
+                        display_name: user.display_name.take(),
+                        href: format!("https://twitch.tv/{}", user.login),
+                        stream: streams.get(&user.login).cloned(),
+                        handle: user.login.take(),
+                        icon_url: user
+                            .profile_image_url
+                            // TODO: replace with placeholder?
+                            .expect("twitch streamer should have a profile image url"),
+                    }
+                })
+                .collect(),
+        )
     }
 }
 

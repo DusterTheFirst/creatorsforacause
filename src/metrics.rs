@@ -16,9 +16,11 @@ pub mod types {
     use std::sync::atomic::{AtomicI64, AtomicU64};
 
     use prometheus_client::{
-        encoding::{EncodeLabelSet, EncodeLabelValue},
-        metrics::{family::Family, gauge::Gauge, counter::Counter},
+        encoding::EncodeLabelSet,
+        metrics::{counter::Counter, family::Family, gauge::Gauge},
     };
+
+    use crate::model::StreamingService;
 
     pub type WatcherRefreshPeriodMetric = Gauge<i64, AtomicI64>;
     pub type LiveCreatorsMetric = Family<StreamingServiceMetricKey, Gauge<i64, AtomicI64>>;
@@ -29,12 +31,6 @@ pub mod types {
         pub service: StreamingService,
         pub username: String,
         pub id: String,
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EncodeLabelValue)]
-    pub enum StreamingService {
-        Twitch,
-        Youtube,
     }
 }
 

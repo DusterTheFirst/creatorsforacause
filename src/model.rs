@@ -1,5 +1,6 @@
 use std::{cmp, fmt::Debug};
 
+use prometheus_client::encoding::EncodeLabelValue;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -15,6 +16,13 @@ pub struct Creator {
     pub href: String,
     pub icon_url: String,
     pub stream: Option<LiveStreamDetails>,
+    pub service: StreamingService,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EncodeLabelValue, Serialize)]
+pub enum StreamingService {
+    Twitch,
+    Youtube,
 }
 
 impl Eq for Creator {}
@@ -51,30 +59,30 @@ pub struct LiveStreamDetails {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all(deserialize = "camelCase"))]
 pub struct Campaign {
-    id: u32,
-    name: String,
-    slug: String,
+    pub id: u32,
+    pub name: String,
+    pub slug: String,
     #[serde(deserialize_with = "javascript_unix_timestamp::deserialize")]
     #[serde(serialize_with = "time::serde::rfc3339::serialize")]
-    starts_at: OffsetDateTime,
+    pub starts_at: OffsetDateTime,
     #[serde(deserialize_with = "javascript_unix_timestamp::option::deserialize")]
     #[serde(serialize_with = "time::serde::rfc3339::option::serialize")]
-    ends_at: Option<OffsetDateTime>,
-    description: String,
-    avatar: TiltifyAvatar,
-    cause_id: u32,
+    pub ends_at: Option<OffsetDateTime>,
+    pub description: String,
+    pub avatar: TiltifyAvatar,
+    pub cause_id: u32,
 
     // Using floats since no math or large numbers are used, so precision is not a problem
-    fundraiser_goal_amount: f64,
-    original_fundraiser_goal: f64,
-    amount_raised: f64,
-    supporting_amount_raised: f64,
-    total_amount_raised: f64,
+    pub fundraiser_goal_amount: f64,
+    pub original_fundraiser_goal: f64,
+    pub amount_raised: f64,
+    pub supporting_amount_raised: f64,
+    pub total_amount_raised: f64,
 
-    supportable: bool,
+    pub supportable: bool,
 
-    user: TiltifyUser,
-    team: TiltifyTeam,
+    pub user: TiltifyUser,
+    pub team: TiltifyTeam,
 }
 
 impl Eq for Campaign {}
@@ -87,28 +95,28 @@ impl PartialEq for Campaign {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename = "camel_case")]
 pub struct TiltifyAvatar {
-    src: Url,
-    alt: String,
-    width: u32,
-    height: u32,
+    pub src: Url,
+    pub alt: String,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename = "camel_case")]
 pub struct TiltifyUser {
-    id: u32,
-    username: String,
-    slug: String,
-    url: String,
-    avatar: TiltifyAvatar,
+    pub id: u32,
+    pub username: String,
+    pub slug: String,
+    pub url: String,
+    pub avatar: TiltifyAvatar,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename = "camel_case")]
 pub struct TiltifyTeam {
-    id: u32,
-    name: String,
-    slug: String,
-    url: String,
-    avatar: TiltifyAvatar,
+    pub id: u32,
+    pub name: String,
+    pub slug: String,
+    pub url: String,
+    pub avatar: TiltifyAvatar,
 }

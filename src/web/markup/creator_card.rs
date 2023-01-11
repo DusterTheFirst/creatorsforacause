@@ -37,13 +37,12 @@ pub fn creator_card<'s>(cx: Scope<'s, CreatorCardProps<'s>>) -> Element<'s> {
                         div {
                             class: "stream",
                             h5 { "Stream" }
-                            p {
-                                "Title: "
-                                a {
-                                    href: "{stream.href}",
-                                    target: "_blank",
-                                    "{stream.title}"
-                                }
+                            a {
+                                class: "title",
+                                href: "{stream.href}",
+                                target: "_blank",
+                                title: "{stream.title}",
+                                "{stream.title}"
                             }
                             p {
                                 "Started: "

@@ -1,4 +1,4 @@
-use std::{iter, sync::Arc};
+use std::sync::Arc;
 
 use color_eyre::eyre::{Context, ContextCompat};
 use serde::{Deserialize, Serialize};
@@ -8,9 +8,7 @@ use tracing::trace;
 
 use crate::{
     config::Config,
-    metrics::types::{
-        LiveCreatorsMetric, StreamingService, StreamingServiceMetricKey, YoutubeQuotaUsageMetric,
-    },
+    metrics::types::{LiveCreatorsMetric, StreamingServiceMetricKey, YoutubeQuotaUsageMetric},
     model::{Campaign, Creator},
 };
 
@@ -42,8 +40,7 @@ pub type WatcherDataReceive = Option<Arc<WatcherData>>;
 pub struct WatcherData {
     #[serde(with = "time::serde::rfc3339")]
     pub updated: OffsetDateTime,
-    pub twitch: Box<[Creator]>,
-    pub youtube: Box<[Creator]>,
+    pub creators: Box<[Creator]>,
     pub tiltify: Arc<Campaign>,
 }
 
@@ -92,13 +89,17 @@ pub async fn live_watcher(
             .wrap_err("failed to update tiltify creators")
             .expect("TODO: REPLACE WITH ERROR HANDLING");
 
-        let twitch_iter = twitch.iter().zip(iter::repeat(StreamingService::Twitch));
-        let youtube_iter = youtube.iter().zip(iter::repeat(StreamingService::Youtube));
+        let mut creators = twitch
+            .into_iter()
+            .chain(youtube.into_iter())
+            .collect::<Box<[Creator]>>();
 
-        for (creator, service) in twitch_iter.chain(youtube_iter) {
+        creators.sort();
+
+        for creator in creators.iter() {
             live_creators
                 .get_or_create(&StreamingServiceMetricKey {
-                    service,
+                    service: creator.service,
                     username: creator.handle.clone(),
                     id: creator.id.clone(),
                 })
@@ -107,8 +108,7 @@ pub async fn live_watcher(
 
         sender.send_replace(Some(Arc::new(WatcherData {
             updated: OffsetDateTime::now_utc(),
-            twitch,
-            youtube,
+            creators,
             tiltify,
         })));
 

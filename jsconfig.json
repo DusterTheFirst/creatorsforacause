@@ -1,6 +1,6 @@
 {
     "compilerOptions": {
-        "lib": ["DOM", "DOM.Iterable", "ES6"],
+        "lib": ["DOM", "DOM.Iterable", "ES2020", "ES2020.Intl"],
         "allowJs": true,
         "checkJs": true
     }

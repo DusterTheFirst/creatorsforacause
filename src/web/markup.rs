@@ -1,9 +1,7 @@
 use dioxus::prelude::*;
 use tokio::sync::watch;
 
-use crate::{
-    watcher::{WatcherData, WatcherDataReceive},
-};
+use crate::watcher::{WatcherData, WatcherDataReceive};
 
 use self::creator_card::creator_card;
 use self::date::locale_date;
@@ -43,15 +41,18 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
 
     if let Some(WatcherData {
         updated,
-        twitch,
-        youtube,
+        creators,
         tiltify,
     }) = watched_data.as_deref()
     {
         cx.render(rsx! {
             main {
-                h1 { "Creators for a Cause" }
+                h1 {
+                    class: "title",
+                    "Creators for a Cause"
+                }
                 p {
+                    class: "updated",
                     "Updated: "
                     locale_date { date: updated }
                 }
@@ -61,39 +62,20 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                 //     }
                 // }
                 section {
-                    h2 { "Fundraiser" }
-                    p { "Together we have raised $TODO:"}
+                    p { "Together we have raised ${tiltify.total_amount_raised} out of the ${tiltify.fundraiser_goal_amount} goal" }
                     pre { serde_json::to_string(tiltify).expect("tiltify should be serializable") }
                 }
                 section {
                     h2 { "Participating Streamers" }
                     div {
-                        class: "platforms",
-                        section {
-                            class: "platform",
-                            h3 { "Twitch" }
-                            div {
-                                class: "creators",
-                                twitch.iter().map(|creator| {
-                                    cx.render(rsx! {
-                                        creator_card { key: "{creator.id}", creator: creator, }
-                                    })
-                                })
-                            }
-                        }
-                        section {
-                            class: "platform",
-                            h3 { "Youtube" }
-                            div {
-                                class: "creators",
-                                youtube.iter().map(|creator| {
-                                    cx.render(rsx! {
-                                        creator_card { key: "{creator.id}", creator: creator, }
-                                    })
-                                })
-                            }
-                        }
+                        class: "creators",
+                        creators.iter().map(|creator| {
+                            cx.render(rsx! {
+                                creator_card { key: "{creator.id}", creator: creator, }
+                            })
+                        })
                     }
+
                 }
             }
         })

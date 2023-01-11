@@ -21,7 +21,17 @@ function update_time(element) {
         return;
     }
 
-    element.textContent = new Date(timestamp).toLocaleString();
+    const date = new Date(timestamp);
+
+    element.textContent = Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "full",
+    }).format(date);
+    element.title = Intl.DateTimeFormat(undefined, {
+        dateStyle: "full",
+        timeStyle: "full",
+        timeZone: "UTC",
+    }).format(date);
 }
 
 /**
