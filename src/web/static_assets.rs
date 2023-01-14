@@ -1,5 +1,5 @@
 use axum::{
-    extract::{OriginalUri, Path},
+    extract::OriginalUri,
     http::HeaderValue,
     response::{IntoResponse, Response},
 };
@@ -12,18 +12,17 @@ use time::{format_description::well_known, OffsetDateTime};
 #[exclude = "LICENSE"]
 struct StaticAssets;
 
+// TODO: Cache-Control header (revalidate)
 pub async fn handler(OriginalUri(uri): OriginalUri, headers: HeaderMap) -> Response {
-    let file_path = uri.path();
+    let file_path = uri.path().trim_start_matches('/');
 
-    let file_path = if file_path == "/" {
+    let file_path = if file_path.is_empty() {
         "dashboard.html"
     } else {
         file_path
     };
 
-    dbg!(&file_path);
-
-    let file = match StaticAssets::get(&file_path) {
+    let file = match StaticAssets::get(file_path) {
         Some(file) => file,
         None => {
             // TODO: better 404 page
@@ -68,8 +67,6 @@ pub async fn handler(OriginalUri(uri): OriginalUri, headers: HeaderMap) -> Respo
                 .flat_map(|etag| Compression::from_str(etag.trim()))
                 .max()
         });
-
-    dbg!(selected_encoding);
 
     let encoded_data = selected_encoding.and_then(|encoding| {
         match encoding {

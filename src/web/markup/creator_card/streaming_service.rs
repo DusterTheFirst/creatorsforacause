@@ -16,8 +16,11 @@ pub fn streaming_service(cx: Scope<Props>) -> Element {
     cx.render(rsx! {
         span {
             class: "service {class}",
-            dangerous_inner_html: icon,
             "{label}"
+            img {
+                class: "icon",
+                src: icon
+            }
         }
     })
 }

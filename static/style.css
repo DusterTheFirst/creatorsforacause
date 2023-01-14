@@ -95,7 +95,7 @@ main > .title {
     max-width: calc(var(--creator-card-width) * 2);
 }
 
-.creators .creator img {
+.creators .creator > .icon {
     width: var(--creator-card-image-width);
     border-radius: 50%;
     margin-inline: auto;

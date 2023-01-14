@@ -24,6 +24,7 @@ pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
         div {
             class: class,
             img {
+                class: "icon",
                 src: "{creator.icon_url}",
                 alt: "Profile Picture",
                 "loading": "lazy",
