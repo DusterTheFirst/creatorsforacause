@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 use axum::http::HeaderValue;
-use color_eyre::{eyre::Context, Help};
-use hyper::{header, Method};
+use color_eyre::{
+    eyre::{Context, ContextCompat},
+    Help,
+};
+use hyper::{header, StatusCode};
 use serde::Deserialize;
 use tracing::trace;
 
@@ -25,7 +28,7 @@ pub struct TiltifyWatcher {
     api_key: String,
 
     // ETag based cache
-    cache: Option<(Option<HeaderValue>, Arc<Campaign>)>,
+    cache: Option<(HeaderValue, Arc<Campaign>)>,
 }
 
 impl TiltifyWatcher {
@@ -41,7 +44,7 @@ impl TiltifyWatcher {
     // No known rate limit
     #[tracing::instrument(skip(self))]
     pub async fn get_campaign<'s>(&'s mut self) -> color_eyre::Result<Arc<Campaign>> {
-        let request = self
+        let mut request = self
             .http_client
             .get(format!(
                 "https://tiltify.com/api/v3/campaigns/{}",
@@ -53,44 +56,13 @@ impl TiltifyWatcher {
 
         // Assuming `cache-control: must-revalidate, private, max-age=0`
         // as that is what the endpoint headers stated at time of development
-        if let Some((cache_etag, cached)) = self.cache.as_ref() {
-            trace!(?cache_etag, "cache is populated, validating");
-
-            let head_request = {
-                let mut request = request
-                    .try_clone()
-                    .expect("request should be able to be cloned");
-
-                *request.method_mut() = Method::HEAD;
-
-                request
-            };
-
-            let response = self
-                .http_client
-                .execute(head_request)
-                .await
-                .wrap_err("tiltify api HEAD request failed")?
-                .error_for_status()
-                .wrap_err("tiltify api returned non success status code")?;
-
-            let etag = response.headers().get(header::ETAG);
-
-            match (etag, cache_etag) {
-                (Some(etag), Some(cache_etag)) if etag == cache_etag => {
-                    trace!(?cache_etag, "cache is valid, using cached campaign");
-
-                    return Ok(Arc::clone(cached));
-                }
-                _ => {
-                    trace!(?cache_etag, ?etag, "cache is invalid");
-                }
-            }
-        } else {
-            trace!("cache miss");
+        if let Some((etag, _)) = self.cache.as_ref() {
+            request
+                .headers_mut()
+                .append(header::IF_NONE_MATCH, etag.clone());
         }
 
-        let response = self
+        let mut response = self
             .http_client
             .execute(request)
             .await
@@ -98,23 +70,32 @@ impl TiltifyWatcher {
             .error_for_status()
             .wrap_err("tiltify api returned non success status code")?;
 
-        let etag = response.headers().get(header::ETAG).cloned();
+        if response.status() != StatusCode::NOT_MODIFIED {
+            let etag = response
+                .headers_mut()
+                .remove(header::ETAG)
+                .wrap_err("etag should be present in response headers")?;
 
-        let response = response
-            .text()
-            .await
-            .wrap_err("unable to receive text response from tiltify api")?;
+            let response = response
+                .text()
+                .await
+                .wrap_err("unable to receive text response from tiltify api")?;
 
-        let json: TiltifyJson<Campaign> = serde_json::from_str(&response)
-            .wrap_err("incompatible json received from tiltify api")
-            .with_note(|| response)?;
+            let json: TiltifyJson<Campaign> = serde_json::from_str(&response)
+                .wrap_err("incompatible json received from tiltify api")
+                .with_note(|| response)?;
 
-        let data = Arc::new(json.data);
+            trace!(?etag, "caching new campaign");
 
-        trace!(?etag, "caching new campaign");
+            self.cache = Some((etag, Arc::new(json.data)));
+        }
 
-        self.cache = Some((etag, Arc::clone(&data)));
+        let (_, cached) = self
+            .cache
+            .as_ref()
+            .cloned()
+            .expect("cache should be populated at this point");
 
-        Ok(data)
+        Ok(cached)
     }
 }

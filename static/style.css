@@ -40,6 +40,9 @@ video {
     --card-padding: 2em 1em;
 
     --card-min-total-width: calc(var(--creator-card-width) + 2em * 2);
+
+    --twitch-color: #9146ff;
+    --youtube-color: #ff0000;
 }
 
 html,
@@ -65,7 +68,7 @@ main > .title {
 }
 
 .updated {
-    color: #444444;
+    color: var(--text-color);
 }
 
 .creators {
@@ -103,4 +106,20 @@ main > .title {
     text-overflow: ellipsis;
     overflow: hidden;
     white-space: nowrap;
+}
+
+
+.creators .creator .service {
+
+}
+
+.creators .creator .service.youtube {
+    background-color: var(--youtube-color);
+}
+.creators .creator .service.twitch {
+    background-color: var(--twitch-color);
+}
+
+.creators .creator .service > .ionicon {
+    height: 100%;
 }

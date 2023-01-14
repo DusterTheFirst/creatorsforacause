@@ -1,4 +1,4 @@
-use std::{cmp, fmt::Debug};
+use std::cmp;
 
 use prometheus_client::encoding::EncodeLabelValue;
 use reqwest::Url;
@@ -20,6 +20,7 @@ pub struct Creator {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EncodeLabelValue, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum StreamingService {
     Twitch,
     Youtube,

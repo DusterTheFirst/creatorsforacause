@@ -2,12 +2,16 @@ use dioxus::prelude::*;
 
 use crate::{model::Creator, web::markup::date::locale_date};
 
+use self::streaming_service::streaming_service;
+
+mod streaming_service;
+
 #[derive(Debug, Props)]
-pub struct CreatorCardProps<'c> {
+pub struct Props<'c> {
     pub creator: &'c Creator,
 }
 
-pub fn creator_card<'s>(cx: Scope<'s, CreatorCardProps<'s>>) -> Element<'s> {
+pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
     let creator = cx.props.creator;
 
     let class = if creator.stream.is_some() {
@@ -29,6 +33,9 @@ pub fn creator_card<'s>(cx: Scope<'s, CreatorCardProps<'s>>) -> Element<'s> {
                 a {
                     href: "{creator.href}",
                     "{creator.display_name}"
+                }
+                streaming_service {
+                    service: creator.service
                 }
             }
             {

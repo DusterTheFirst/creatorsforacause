@@ -11,7 +11,7 @@ lto = true
 
 [dependencies]
 aliri_braid = "^0.3"
-axum = { version = "^0.6", features = ["macros"] }
+axum = { version = "^0.6", features = ["macros", "headers"] }
 color-eyre = "^0.6"
 dioxus = { version = "^0.3", git = "https://github.com/dioxuslabs/dioxus"}
 dioxus-liveview = { version = "^0.3", features = ["axum"], git = "https://github.com/dioxuslabs/dioxus" }
@@ -28,6 +28,7 @@ opentelemetry-otlp = { version = "^0.11", features = ["tls", "tls-roots"] }
 opentelemetry-semantic-conventions = "^0.10"
 prometheus-client = "^0.19"
 reqwest = { version = "^0.11", features = ["rustls-tls"], default-features = false }
+rust-embed-for-web = "11.1.0"
 scraper = "^0.14"
 sentry = { version = "^0.29", features = ["backtrace", "contexts", "panic", "tower", "tracing"] }
 sentry-tower = { version = "^0.29", features = ["http"] }

@@ -71,6 +71,7 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                         class: "creators",
                         creators.iter().map(|creator| {
                             cx.render(rsx! {
+                                // TODO: show creator platform
                                 creator_card { key: "{creator.id}", creator: creator, }
                             })
                         })
