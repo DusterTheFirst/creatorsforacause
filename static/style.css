@@ -121,21 +121,21 @@ main > .title {
 .creators .creator .service.youtube {
     background-color: var(--youtube-color);
 }
-.creators .creator .service.youtube::after {
+.creators .creator .service.youtube::before {
     content: url(/logos/logo-youtube.svg);
 }
 .creators .creator .service.twitch {
     background-color: var(--twitch-color);
 }
-.creators .creator .service.twitch::after {
+.creators .creator .service.twitch::before {
     content: url(/logos/logo-twitch.svg);
 }
 
-.creators .creator .service::after {
+.creators .creator .service::before {
     display: inline-block;
     width: 1em;
     height: 1em;
     vertical-align: middle;
-    margin-inline-start: 0.5ch;
+    margin-inline-end: 0.5ch;
     margin-block: auto;
 }

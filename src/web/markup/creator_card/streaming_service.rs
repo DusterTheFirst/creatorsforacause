@@ -10,7 +10,7 @@ pub struct Props {
 pub fn streaming_service(cx: Scope<Props>) -> Element {
     let (class, label) = match cx.props.service {
         StreamingService::Twitch => ("twitch", "Twitch"),
-        StreamingService::Youtube => ("youtube", "Youtube"),
+        StreamingService::Youtube => ("youtube", "YouTube"),
     };
 
     cx.render(rsx! {

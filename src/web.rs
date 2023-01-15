@@ -21,7 +21,7 @@ pub async fn web_server(listen: SocketAddr, watcher_data: watch::Receiver<Watche
             "/live-view",
             live_view::router(listen, watcher_data.clone()),
         )
-        .route("/healthy", get(|| async { "OK" }))
+        .route("/health", get(|| async { "OK" }))
         .route_service("/json", get(json).with_state(watcher_data))
         .fallback_service(get(static_assets::handler))
         .layer(
