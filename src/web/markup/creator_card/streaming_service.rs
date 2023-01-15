@@ -8,20 +8,15 @@ pub struct Props {
 }
 
 pub fn streaming_service(cx: Scope<Props>) -> Element {
-    let (class, label, icon) = match cx.props.service {
-        StreamingService::Twitch => ("twitch", "Twitch", "/logos/logo-twitch.svg"),
-        StreamingService::Youtube => ("youtube", "Youtube", "/logos/logo-youtube.svg"),
+    let (class, label) = match cx.props.service {
+        StreamingService::Twitch => ("twitch", "Twitch"),
+        StreamingService::Youtube => ("youtube", "Youtube"),
     };
 
     cx.render(rsx! {
-        span {
+        div {
             class: "service {class}",
             "{label}"
-            img {
-                class: "icon",
-                draggable: false,
-                src: icon
-            }
         }
     })
 }

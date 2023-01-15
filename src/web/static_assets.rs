@@ -34,8 +34,8 @@ pub async fn handler(OriginalUri(uri): OriginalUri, headers: HeaderMap) -> Respo
     };
 
     // Encoding
-    let accepted_encodings = headers
-        .get(header::ACCEPT_ENCODING)
+    let accepted_encodings = dbg!(headers
+        .get(header::ACCEPT_ENCODING))
         .and_then(|value| value.to_str().ok())
         .map_or(HashSet::new(), |value| {
             value

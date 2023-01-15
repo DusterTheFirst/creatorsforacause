@@ -27,7 +27,7 @@ pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
                 class: "icon",
                 draggable: false,
                 src: "{creator.icon_url}",
-                alt: "Profile Picture",
+                alt: "profile picture for {creator.display_name}",
                 "loading": "lazy",
             }
             h4 {
@@ -36,9 +36,6 @@ pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
                     href: "{creator.href}",
                     target: "_blank",
                     "{creator.display_name}"
-                }
-                streaming_service {
-                    service: creator.service
                 }
             }
             {
@@ -69,6 +66,9 @@ pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
                         }
                     }
                 })
+            }
+            streaming_service {
+                service: creator.service
             }
         }
     })

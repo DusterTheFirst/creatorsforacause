@@ -108,18 +108,34 @@ main > .title {
     white-space: nowrap;
 }
 
-
 .creators .creator .service {
-
+    display: inline-block;
+    right: 0;
+    margin-inline-start: auto;
+    white-space: nowrap;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.75rem;
+    line-height: 1em;
 }
 
 .creators .creator .service.youtube {
     background-color: var(--youtube-color);
 }
+.creators .creator .service.youtube::after {
+    content: url(/logos/logo-youtube.svg);
+}
 .creators .creator .service.twitch {
     background-color: var(--twitch-color);
 }
+.creators .creator .service.twitch::after {
+    content: url(/logos/logo-twitch.svg);
+}
 
-.creators .creator .service > .ionicon {
-    height: 100%;
+.creators .creator .service::after {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    margin-inline-start: 0.5ch;
+    margin-block: auto;
 }
