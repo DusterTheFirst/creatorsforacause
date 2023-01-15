@@ -13,6 +13,7 @@ lto = true
 aliri_braid = "^0.3"
 axum = { version = "^0.6", features = ["macros", "headers"] }
 color-eyre = "^0.6"
+const_format = { version = "0.2.30", features = ["rust_1_64"] }
 dioxus = { version = "^0.3", git = "https://github.com/dioxuslabs/dioxus"}
 dioxus-liveview = { version = "^0.3", features = ["axum"], git = "https://github.com/dioxuslabs/dioxus" }
 dotenv = "^0.15"

@@ -19,6 +19,7 @@ pub fn streaming_service(cx: Scope<Props>) -> Element {
             "{label}"
             img {
                 class: "icon",
+                draggable: false,
                 src: icon
             }
         }

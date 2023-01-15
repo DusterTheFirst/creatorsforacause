@@ -1,4 +1,5 @@
 use dioxus::prelude::*;
+use git_version::git_version;
 use tokio::sync::watch;
 
 use crate::watcher::{WatcherData, WatcherDataReceive};
@@ -77,6 +78,24 @@ pub fn dashboard<'s>(cx: Scope<'s, DashboardProps>) -> Element<'s> {
                         })
                     }
 
+                }
+                footer {
+                    h1 { "Server" }
+                    env!("CARGO_PKG_NAME")
+                    env!("CARGO_PKG_VERSION")
+                    a {
+                        href: const_format::formatcp!(
+                            "https://github.com/dusterthefirst/creatorsforacause/tree/{}",
+                            git_version!(args = ["--always"])
+                        ),
+                        target: "_blank",
+                        git_version!()
+                    }
+                    if cfg!(debug_assertions) {
+                        "development"
+                    } else {
+                        "production"
+                    }
                 }
             }
         })

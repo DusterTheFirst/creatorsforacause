@@ -25,6 +25,7 @@ pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
             class: class,
             img {
                 class: "icon",
+                draggable: false,
                 src: "{creator.icon_url}",
                 alt: "Profile Picture",
                 "loading": "lazy",
@@ -33,6 +34,7 @@ pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
                 class: "display_name",
                 a {
                     href: "{creator.href}",
+                    target: "_blank",
                     "{creator.display_name}"
                 }
                 streaming_service {
