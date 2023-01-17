@@ -28,9 +28,9 @@ pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
                 draggable: false,
                 src: "{creator.icon_url}",
                 alt: "profile picture for {creator.display_name}",
-                "loading": "lazy",
+                "loading": "lazy"
             }
-            h4 {
+            h3 {
                 class: "display_name",
                 a {
                     href: "{creator.href}",
@@ -43,7 +43,7 @@ pub fn creator_card<'s>(cx: Scope<'s, Props<'s>>) -> Element<'s> {
                     rsx! {
                         div {
                             class: "stream",
-                            h5 { "Stream" }
+                            h4 { "Stream" }
                             a {
                                 class: "title",
                                 href: "{stream.href}",

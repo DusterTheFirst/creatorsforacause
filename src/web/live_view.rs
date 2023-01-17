@@ -15,6 +15,8 @@ pub fn router(listen: SocketAddr, watcher_data: watch::Receiver<WatcherDataRecei
         .route(
             "/glue.js",
             get(move || async move {
+                // TODO: CACHING
+
                 #[cfg(debug_assertions)]
                 let domain = &format!("ws://{listen}/live-view/ws");
 

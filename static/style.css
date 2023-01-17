@@ -118,6 +118,15 @@ main > .title {
     line-height: 1em;
 }
 
+.creators .creator .service::before {
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    margin-inline-end: 0.5ch;
+    margin-block: auto;
+}
+
 .creators .creator .service.youtube {
     background-color: var(--youtube-color);
 }
@@ -129,13 +138,4 @@ main > .title {
 }
 .creators .creator .service.twitch::before {
     content: url(/logos/logo-twitch.svg);
-}
-
-.creators .creator .service::before {
-    display: inline-block;
-    width: 1em;
-    height: 1em;
-    vertical-align: middle;
-    margin-inline-end: 0.5ch;
-    margin-block: auto;
 }
