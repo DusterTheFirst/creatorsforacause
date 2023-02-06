@@ -1,5 +1,6 @@
 ## TODO:
 
+- [ ] Way better error handling/reporting https://creators-for-a-cause.sentry.io/issues/3913212660/?project=4504282248708096&query=is%3Aunresolved
 - [ ] Clear prometheus tag families before pusing new data
 - [ ] LTO=thin
 - [ ] https://doc.rust-lang.org/stable/std/ops/enum.ControlFlow.html
