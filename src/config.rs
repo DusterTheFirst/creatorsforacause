@@ -27,7 +27,7 @@ pub static CONFIG: Config = Config {
 
     campaign: CampaignConfig { id: 468510 },
 
-    // TODO: FIXME: User IDs?
+    // TODO: FIXME: User IDs!!!!!!!!
     creators: CreatorNames {
         twitch: &[
             NicknameRef::from_str("gathe_"),
@@ -54,7 +54,7 @@ pub static CONFIG: Config = Config {
         ],
         youtube: &[
             YoutubeHandleRef::from_str("@ReapeeRon"),
-            YoutubeHandleRef::from_str("@Santaa."),
+            YoutubeHandleRef::from_str("@santaagd"),
             //
             // Test accountts
             #[cfg(debug_assertions)]

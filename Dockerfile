@@ -15,7 +15,7 @@ COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Build application
-COPY . .
+COPY --chown=root:root . .
 RUN set -eux; \
     # Make Git happy (fly.toml does not get copied when running `fly deploy`)
     git restore fly.toml; \

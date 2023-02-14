@@ -91,7 +91,7 @@ pub async fn live_watcher(
         let (youtube, twitch, tiltify) = match result {
             Ok(success) => success,
             Err(error) => {
-                error!(%error);
+                error!(?error);
                 continue;
             }
         };
