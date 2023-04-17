@@ -28,6 +28,7 @@ pub struct TwitchEnvironment {
 
 pub struct TwitchLiveWatcher {
     helix_client: twitch_api::HelixClient<'static, reqwest::Client>,
+    environment: TwitchEnvironment,
     token: AppAccessToken,
     creators_names: &'static [&'static NicknameRef],
 }
@@ -43,8 +44,8 @@ impl TwitchLiveWatcher {
 
         let token = AppAccessToken::get_app_access_token(
             &helix_client,
-            environment.client_id,
-            environment.client_secret,
+            environment.client_id.clone(),
+            environment.client_secret.clone(),
             vec![],
         )
         .await
@@ -57,6 +58,7 @@ impl TwitchLiveWatcher {
         TwitchLiveWatcher {
             helix_client,
             token,
+            environment,
             creators_names,
         }
     }
@@ -68,12 +70,23 @@ impl TwitchLiveWatcher {
         let token: &mut AppAccessToken = &mut self.token;
 
         if token.is_elapsed() {
-            token
-                .refresh_token(client)
-                .await
-                .wrap_err("failed to refresh twitch access token")?;
+            match token.refresh_token(client).await {
+                Ok(()) => {
+                    trace!(expires_in = ?token.expires_in(), "refreshed access token");
+                }
+                Err(error) => {
+                    tracing::warn!(?error, "failed to refresh access token, re-authenticating");
 
-            trace!(expires_in = ?token.expires_in(), "refreshed access token");
+                    *token = AppAccessToken::get_app_access_token(
+                        &self.helix_client,
+                        self.environment.client_id.clone(),
+                        self.environment.client_secret.clone(),
+                        vec![],
+                    )
+                    .await
+                    .wrap_err("failed to re-authenticate")?;
+                }
+            }
         }
 
         let (users, streams) = tokio::try_join!(
